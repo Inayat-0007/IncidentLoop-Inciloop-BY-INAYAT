@@ -41,6 +41,14 @@ function fmtMs(ms: number): string {
 function parseApiError(status: number, body: ApiErrorBody | null, fallback: string): string {
   const detail = body?.detail || body?.message || body?.error;
   const code = body?.code;
+  if (code === "llm_quota") {
+    const why = detail || "Gemini quota or rate limit";
+    return (
+      `Gemini quota exceeded (${status}): ${why}. ` +
+      "Wait for the free-tier reset, or use a billed key / another GEMINI_MODEL. " +
+      "Live Investigate does not fall back to heuristic."
+    );
+  }
   const head =
     status === 502 || status === 503
       ? `Gemini unavailable (${status})`
@@ -372,7 +380,10 @@ ${renderTraceLines(incident?.traces ?? [])}│ Runtime: ${fmtMs(runtime).padEnd(
               </button>
             </div>
             {error ? (
-              <p className="err" role="alert">
+              <p
+                className={error.toLowerCase().includes("quota") ? "err quota" : "err"}
+                role="alert"
+              >
                 {error}
               </p>
             ) : null}

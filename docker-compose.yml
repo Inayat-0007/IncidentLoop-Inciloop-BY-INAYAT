@@ -8,6 +8,8 @@ services:
       DEVOPSPILOT_FORCE_HEURISTIC: ${DEVOPSPILOT_FORCE_HEURISTIC:-0}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      GEMINI_MODEL_FALLBACK: ${GEMINI_MODEL_FALLBACK:-gemini-2.5-flash-lite,gemini-2.0-flash,gemini-3.6-flash}
+      GEMINI_NODES: ${GEMINI_NODES:-core}
       GEMINI_TIMEOUT_S: ${GEMINI_TIMEOUT_S:-20}
       WEB_ORIGIN: http://localhost:8000
       DATA_SOURCE: ${DATA_SOURCE:-files}

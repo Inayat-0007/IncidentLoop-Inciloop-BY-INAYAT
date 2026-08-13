@@ -64,6 +64,23 @@ def rollback_webhook_url() -> str:
 GEMINI_TIMEOUT_S = float(os.getenv("GEMINI_TIMEOUT_S", "20"))
 TOOL_TIMEOUT_S = float(os.getenv("TOOL_TIMEOUT_S", "5"))
 
+
+def gemini_nodes() -> str:
+    """Live default `core`: planner + decision call Gemini. `all` keeps six LLM nodes."""
+    raw = (os.getenv("GEMINI_NODES") or "core").strip().lower()
+    if raw in {"core", "all"}:
+        return raw
+    return "core"
+
+
+def use_gemini_for(node: str) -> bool:
+    """Heuristic CI never calls Gemini. Live `core` only uses planner + decision."""
+    if heuristic_enabled():
+        return False
+    if gemini_nodes() == "all":
+        return True
+    return node in {"planner", "decision"}
+
 KNOWN_SERVICES = frozenset(
     {"checkout-api", "payment-api", "inventory-api", "auth-api", "catalog-api"}
 )

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from backend.config import heuristic_enabled
+from backend.config import use_gemini_for
 from backend.llm import acomplete
 from backend.schemas import Decision, Recommendation
 from backend.tools.http_client import get_metrics_http
@@ -32,7 +32,7 @@ async def verify(scenario_id: str, service: str, decision: Decision) -> dict[str
         f"error_rate={metrics.get('error_rate')} latency_ms={metrics.get('latency_ms')} "
         f"status={metrics.get('status')} note={note}"
     )
-    if not heuristic_enabled():
+    if use_gemini_for("verification"):
         note = await acomplete(
             "You are the Verification Agent. Summarize post-decision metrics. "
             "Do not execute rollback. Do not invent metrics.",

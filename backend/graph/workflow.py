@@ -13,7 +13,7 @@ from backend.agents.knowledge import retrieve_knowledge
 from backend.agents.planner import extract_service, plan_steps, resolve_scenario
 from backend.agents.release import inspect_release
 from backend.agents.verification import verify
-from backend.config import heuristic_enabled
+from backend.config import use_gemini_for
 from backend.errors import GraphRunError, LlmError
 from backend.llm import acomplete, stable_ms
 from backend.memory import store as memory
@@ -66,14 +66,14 @@ async def planner_node(state: GraphState) -> GraphState:
         plan = plan_steps(service, scenario_id)
         if similar:
             plan += " Memory: seen similar incidents " + ", ".join(str(s.get("id")) for s in similar[:3]) + "."
-        if heuristic_enabled():
-            plan_out = plan
-        else:
+        if use_gemini_for("planner"):
             plan_out = await acomplete(
                 "You are the Planner Agent. Output a short numbered plan. Never execute rollback. "
                 "Use conversation history and prior recommendations as context only.",
                 plan + "\ncontext=" + str(memory_context),
             )
+        else:
+            plan_out = plan
         status = "ok"
         errors: list[str] = []
     except (LlmError, GraphRunError):

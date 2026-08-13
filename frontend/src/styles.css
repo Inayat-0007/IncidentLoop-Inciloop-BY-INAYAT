@@ -476,6 +476,13 @@ button:disabled {
   font-size: 0.88rem;
 }
 
+.err.quota {
+  border: 1px solid #c45c4a;
+  background: rgba(196, 92, 74, 0.18);
+  color: #ffd2c8;
+  font-weight: 600;
+}
+
 .err code {
   font-family: var(--mono);
   font-size: 0.8rem;

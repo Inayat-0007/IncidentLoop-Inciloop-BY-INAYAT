@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from backend.config import heuristic_enabled
+from backend.config import use_gemini_for
 from backend.llm import acomplete
 from backend.memory import store as memory
 from backend.rag.retriever import retrieve
@@ -20,17 +20,17 @@ async def retrieve_knowledge(query: str, service: str = "") -> dict[str, Any]:
         for p in prior
     )
     user = f"RAG documents:\n{rag_blob or '(none)'}\nPrior incidents from SQLite memory:\n{mem_blob or '(none)'}"
-    if heuristic_enabled():
-        note = "Retrieved: " + ", ".join(citations)
-        if prior:
-            note += " | memory: " + ", ".join(str(p.get("id")) for p in prior[:3])
-    else:
+    if use_gemini_for("knowledge"):
         note = await acomplete(
             "You are the Knowledge Agent. Summarize retrieved runbooks and past incidents. "
             "Cite document ids and titles. Mention SQLite memory hits if present. "
             "Do not recommend ROLLBACK. Do not invent documents.",
             user,
         )
+    else:
+        note = "Retrieved: " + ", ".join(citations)
+        if prior:
+            note += " | memory: " + ", ".join(str(p.get("id")) for p in prior[:3])
     return {
         "docs": hits,
         "ids": [h["id"] for h in hits],
