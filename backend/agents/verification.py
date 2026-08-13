@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from backend.config import heuristic_enabled
+from backend.llm import acomplete
 from backend.schemas import Decision, Recommendation
 from backend.tools.http_client import get_metrics_http
 
@@ -22,6 +24,17 @@ async def verify(scenario_id: str, service: str, decision: Decision) -> dict[str
     else:
         status = "unverified"
         note = "Current metrics do not show recovery."
+    blob = (
+        f"recommendation={decision.recommendation.value} recovered={recovered} "
+        f"error_rate={metrics.get('error_rate')} latency_ms={metrics.get('latency_ms')} "
+        f"status={metrics.get('status')} note={note}"
+    )
+    if not heuristic_enabled():
+        note = await acomplete(
+            "You are the Verification Agent. Summarize post-decision metrics. "
+            "Do not execute rollback. Do not invent metrics.",
+            blob,
+        )
     return {
         "metrics": metrics,
         "recovered": recovered,

@@ -125,6 +125,11 @@ async def investigate(body: InvestigateRequest) -> Any:
     payload = record.model_dump()
     memory.save_incident(record.id, payload)
     memory.add_conversation(record.id, "user", body.prompt)
+    memory.add_conversation(
+        record.id,
+        "assistant",
+        f"{decision.recommendation.value}: {decision.reason}",
+    )
     memory.save_recommendation(record.id, decision.model_dump())
     memory.dump_json_backup()
     return record

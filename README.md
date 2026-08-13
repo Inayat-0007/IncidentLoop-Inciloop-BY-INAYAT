@@ -59,6 +59,17 @@ Set `GEMINI_API_KEY` in `.env` (never commit it). Docker Compose passes `GEMINI_
 
 `DEVOPSPILOT_FORCE_HEURISTIC=1` is **pytest/CI only**.
 
+## Evaluation scoring
+
+CI runs the ~20 fixed scenarios against the **heuristic policy** (no Gemini). After those runs, pytest prints:
+
+- **decision accuracy %** (must be 100% on heuristic fixtures)
+- **tool-call correctness** (expected tools present: metrics, logs, RAG, latest release)
+- **RAG relevance** (checkout-500 / rollback policy doc ids or keywords hit)
+- **latency** (recorded in ms; no fake SLO fail unless a case is wildly slow)
+
+Live Gemini is **demo/manual** — CI does not call Gemini and does not treat it as a production fallback.
+
 ## Resume bullet
 
 Built DevOpsPilot, a Python/FastAPI LangGraph multi-agent assistant that investigates simulated incidents with RAG runbooks, evidence-based rollback recommendations, a hard human-authorization policy gate, MCP tools, and a pytest suite of 20 scenarios.
@@ -68,7 +79,7 @@ Built DevOpsPilot, a Python/FastAPI LangGraph multi-agent assistant that investi
 ```
 backend/agents/   planner, incident, knowledge, release, decision, verification
 backend/tools/    monitoring, logs, release (mock production)
-backend/rag/      ingest + retriever (markdown → Chroma / keyword)
+backend/rag/      ingest + Chroma retriever (same hash embeddings)
 backend/graph/    LangGraph workflow
 frontend/        Vite + React AgentOps dashboard
 knowledge/       runbooks + historical incidents

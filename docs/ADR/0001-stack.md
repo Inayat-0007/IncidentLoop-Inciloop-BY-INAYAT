@@ -16,7 +16,7 @@ Replace the Node pin with:
 - Python 3.12 + FastAPI + Pydantic
 - LangGraph (six nodes, one LLM)
 - ChromaDB for RAG with **deterministic embeddings** so CI works without model downloads or paid APIs
-- Heuristic decision engine when no `GEMINI_API_KEY` / `OPENAI_API_KEY` / Azure credentials are set
+- Heuristic decision engine is **TEST/CI only** (`DEVOPSPILOT_FORCE_HEURISTIC=1`). Live `POST /investigate` requires Gemini; if Gemini fails, return 502/503 — never a silent production fallback that fabricates ROLLBACK.
 - Vite + React for AgentOps
 - File/SQLite memory (not Postgres) for MVP
 - Markdown knowledge corpus (not PDF) for ingest simplicity and git review
@@ -28,3 +28,4 @@ Remove unused Node/Next/Hono apps so the repository is one coherent product.
 - CI is pytest + ruff, not pnpm.
 - Agents must not reintroduce Hono/Next/Drizzle.
 - Rollback remains a **human-authorized** mutation; the graph only recommends.
+- CI scores the deterministic heuristic policy. Live Gemini is demo/manual, not a CI fallback.

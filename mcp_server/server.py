@@ -8,6 +8,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from backend.policy.gate import evaluate_mcp_rollback
 from backend.tools.logs import get_logs
 from backend.tools.monitoring import get_metrics
 from backend.tools.release import get_latest_release, rollback_release
@@ -35,13 +36,21 @@ def release_latest(scenario_id: str = "default") -> dict:
 
 
 @mcp.tool()
-def release_rollback(scenario_id: str = "default", authorized: bool = False) -> dict:
-    """Execute simulated rollback. Refuses unless authorized=true."""
-    if not authorized:
-        return {
-            "ok": False,
-            "message": "ESCALATE TO HUMAN: MCP rollback requires authorized=true",
-        }
+def release_rollback(
+    scenario_id: str = "default",
+    authorized: bool = False,
+    token: str = "",
+    incident_id: str = "",
+) -> dict:
+    """Execute simulated rollback. Same policy as HTTP: token + authorized + evidence/release/target."""
+    ok, message = evaluate_mcp_rollback(
+        token=token,
+        authorized=authorized,
+        scenario_id=scenario_id,
+        incident_id=incident_id or None,
+    )
+    if not ok:
+        return {"ok": False, "message": message}
     return rollback_release(scenario_id)
 
 

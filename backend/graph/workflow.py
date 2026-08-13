@@ -16,6 +16,7 @@ from backend.agents.verification import verify
 from backend.config import heuristic_enabled
 from backend.errors import GraphRunError, LlmError
 from backend.llm import acomplete, stable_ms
+from backend.memory import store as memory
 from backend.schemas import AgentTrace, Decision
 
 
@@ -34,6 +35,7 @@ class GraphState(TypedDict, total=False):
     verification: dict[str, Any]
     traces: Annotated[list[dict[str, Any]], operator.add]
     node_errors: Annotated[list[str], operator.add]
+    memory_context: dict[str, Any]
 
 
 def _trace(agent: str, duration_ms: float, **kwargs: Any) -> dict[str, Any]:
@@ -46,13 +48,31 @@ async def planner_node(state: GraphState) -> GraphState:
         prompt = state.get("prompt") or ""
         scenario_id = resolve_scenario(prompt, state.get("scenario_id"))
         service = extract_service(prompt, state.get("service"))
+        history = memory.conversation_history(limit=8)
+        prev = memory.previous_recommendations(limit=5, service=service, query=prompt)
+        similar = memory.similar_incidents(service, prompt, limit=5)
+        memory_context = {
+            "conversation_history": history,
+            "previous_recommendations": [
+                {
+                    "service": r.get("service"),
+                    "recommendation": r.get("recommendation"),
+                    "reason": r.get("reason"),
+                }
+                for r in prev
+            ],
+            "similar_incidents": similar,
+        }
         plan = plan_steps(service, scenario_id)
+        if similar:
+            plan += " Memory: seen similar incidents " + ", ".join(str(s.get("id")) for s in similar[:3]) + "."
         if heuristic_enabled():
             plan_out = plan
         else:
             plan_out = await acomplete(
-                "You are the Planner Agent. Output a short numbered plan. Never execute rollback.",
-                plan,
+                "You are the Planner Agent. Output a short numbered plan. Never execute rollback. "
+                "Use conversation history and prior recommendations as context only.",
+                plan + "\ncontext=" + str(memory_context),
             )
         status = "ok"
         errors: list[str] = []
@@ -75,6 +95,7 @@ async def planner_node(state: GraphState) -> GraphState:
         "plan": plan_out,
         "traces": traces,
         "node_errors": errors,
+        "memory_context": memory_context,
     }
 
 
@@ -106,7 +127,7 @@ async def knowledge_node(state: GraphState) -> GraphState:
         query = (
             f"{state.get('prompt')} {state.get('service')} checkout 500 deploy database timeout rollback policy"
         )
-        result = await retrieve_knowledge(query)
+        result = await retrieve_knowledge(query, state.get("service") or "")
     except (LlmError, GraphRunError):
         raise
     except Exception as exc:
@@ -119,7 +140,8 @@ async def knowledge_node(state: GraphState) -> GraphState:
                 "knowledge",
                 (time.perf_counter() - t0) * 1000,
                 tools_used=result["tools"],
-                docs_retrieved=result["ids"],
+                docs_retrieved=result["ids"]
+                + [str(h.get("id")) for h in (result.get("memory_hits") or [])],
                 status="ok",
             )
         ],
@@ -158,6 +180,7 @@ async def decision_node(state: GraphState) -> GraphState:
             logs=state.get("logs") or {},
             release=state.get("release") or {},
             docs=state.get("docs") or [],
+            memory_context=state.get("memory_context") or {},
         )
     except (LlmError, GraphRunError):
         raise

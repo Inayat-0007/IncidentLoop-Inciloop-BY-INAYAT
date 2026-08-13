@@ -247,9 +247,18 @@ def heuristic_decision(
     )
 
 
+def _with_memory_evidence(decision: Decision, memory_context: dict[str, Any]) -> Decision:
+    similar = memory_context.get("similar_incidents") or []
+    if not similar:
+        return decision
+    extra = "prior incidents from memory: " + ", ".join(str(s.get("id") or "") for s in similar[:3])
+    return decision.model_copy(update={"evidence": list(decision.evidence) + [extra]})
+
+
 async def decide(**kwargs: Any) -> Decision:
+    memory_context = kwargs.pop("memory_context", None) or {}
     if heuristic_enabled():
-        return heuristic_decision(**kwargs)
+        return _with_memory_evidence(heuristic_decision(**kwargs), memory_context)
 
     prompt = kwargs.get("prompt") or ""
     service = kwargs.get("service") or ""
@@ -266,7 +275,11 @@ async def decide(**kwargs: Any) -> Decision:
         "logs": logs,
         "release": release,
         "doc_ids": [d.get("id") for d in docs],
+        "doc_titles": [d.get("title") for d in docs],
         "doc_excerpts": [((d.get("text") or "")[:400]) for d in docs[:4]],
+        "conversation_history": memory_context.get("conversation_history") or [],
+        "previous_recommendations": memory_context.get("previous_recommendations") or [],
+        "similar_incidents": memory_context.get("similar_incidents") or [],
     }
     parsed = await acomplete_decision(
         "You are the Decision Agent for DevOpsPilot. "
@@ -276,11 +289,14 @@ async def decide(**kwargs: Any) -> Decision:
         "If evidence is insufficient for rollback policy, use INVESTIGATE or ESCALATE, never a guessed ROLLBACK.",
         str(payload),
     )
-    return Decision(
-        service=service,
-        observed_metrics=metrics,
-        evidence=list(parsed.evidence),
-        recommendation=Recommendation(parsed.recommendation),
-        reason=parsed.reason.strip(),
-        confidence=min(1.0, max(0.0, float(parsed.confidence))),
+    return _with_memory_evidence(
+        Decision(
+            service=service,
+            observed_metrics=metrics,
+            evidence=list(parsed.evidence),
+            recommendation=Recommendation(parsed.recommendation),
+            reason=parsed.reason.strip(),
+            confidence=min(1.0, max(0.0, float(parsed.confidence))),
+        ),
+        memory_context,
     )
