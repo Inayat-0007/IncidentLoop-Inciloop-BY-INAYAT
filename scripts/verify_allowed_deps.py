@@ -6,12 +6,15 @@ from __future__ import annotations
 import json
 import re
 import sys
-import urllib.error
-import urllib.request
 from pathlib import Path
+
+import httpx
 
 ROOT = Path(__file__).resolve().parents[1]
 ALLOWED = (ROOT / "ALLOWED_DEPS.md").read_text(encoding="utf-8")
+NAME_RE = re.compile(r"^[A-Za-z0-9._@/-]+$")
+PYPI_JSON = "https://pypi.org/pypi/{name}/json"
+NPM_JSON = "https://registry.npmjs.org/{name}"
 
 
 def allowed_names(section_header: str) -> set[str]:
@@ -41,14 +44,20 @@ def req_names() -> list[str]:
     return names
 
 
-def check_pypi(name: str) -> None:
-    url = f"https://pypi.org/pypi/{name}/json"
+def assert_safe_name(name: str) -> None:
+    if not NAME_RE.fullmatch(name) or ".." in name:
+        raise SystemExit(f"unsafe dependency name: {name}")
+
+
+def check_url(url: str, missing_label: str, name: str) -> None:
     try:
-        with urllib.request.urlopen(url, timeout=20) as resp:
-            if resp.status != 200:
-                raise RuntimeError(name)
-    except urllib.error.HTTPError as exc:
-        raise SystemExit(f"PyPI missing: {name} ({exc.code})") from exc
+        with httpx.Client(timeout=20.0, follow_redirects=True) as client:
+            resp = client.get(url)
+            if resp.status_code == 404:
+                raise SystemExit(f"{missing_label} missing: {name} (404)")
+            resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise SystemExit(f"{missing_label} check failed: {name} ({exc})") from exc
 
 
 def main() -> int:
@@ -59,7 +68,8 @@ def main() -> int:
         if name not in pypi_allowed:
             print(f"not on ALLOWED_DEPS.md: {name}", file=sys.stderr)
             return 1
-        check_pypi(name)
+        assert_safe_name(name)
+        check_url(PYPI_JSON.format(name=name), "PyPI", name)
 
     pkg = ROOT / "frontend" / "package.json"
     if pkg.exists():
@@ -70,13 +80,8 @@ def main() -> int:
             if name not in npm_allowed:
                 print(f"frontend dep not on ALLOWED_DEPS.md: {name}", file=sys.stderr)
                 return 1
-            url = f"https://registry.npmjs.org/{name}"
-            try:
-                with urllib.request.urlopen(url, timeout=20) as resp:
-                    if resp.status != 200:
-                        raise RuntimeError(name)
-            except urllib.error.HTTPError as exc:
-                raise SystemExit(f"npm missing: {name} ({exc.code})") from exc
+            assert_safe_name(name)
+            check_url(NPM_JSON.format(name=name), "npm", name)
     print("allowed deps ok")
     return 0
 

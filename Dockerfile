@@ -16,6 +16,9 @@ COPY mcp_server ./mcp_server
 COPY contracts ./contracts
 COPY scripts ./scripts
 COPY --from=web /web/dist ./frontend/dist
-RUN mkdir -p data
+RUN mkdir -p data \
+    && useradd --create-home --uid 10001 --shell /usr/sbin/nologin appuser \
+    && chown -R appuser:appuser /app
+USER appuser
 EXPOSE 8000
 CMD ["python", "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
