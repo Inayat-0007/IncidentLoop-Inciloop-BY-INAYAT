@@ -10,6 +10,8 @@ Origin: [https://github.com/Inayat-0007/IncidentLoop-Inciloop-BY-INAYAT.git](htt
 
 This repository keeps the 2026 vibe-coding harness (`VIBE_CODING_STARTER_PACK_2026.md`, `AGENTS.md`, contracts, CI) but the product is DevOpsPilot — not a Next.js/Hono incident console.
 
+**First-time setup (env, ports, routes, checklist):** [`docs/BEFORE_FIRST_RUN.md`](docs/BEFORE_FIRST_RUN.md).
+
 ## Simulated production (honest disclaimer)
 
 Metrics, logs, and releases are **in-process mocks**. Nothing talks to a real cluster, Kubernetes, or vendor APM. Rollback only mutates mock state (error_rate ~1.1, latency ~210).
