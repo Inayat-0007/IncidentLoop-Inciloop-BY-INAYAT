@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend.config import DATA_DIR, ROLLBACK_TOKEN, WEB_ORIGIN
+from backend.errors import GraphRunError
 from backend.memory import store as memory
 from backend.policy.gate import evaluate_rollback_execution
 from backend.rag.ingest import ingest
@@ -24,6 +25,7 @@ from backend.schemas import (
 from backend.tools import logs as logs_tool
 from backend.tools import monitoring as monitoring_tool
 from backend.tools import release as release_tool
+from backend.tools.http_client import bind_app
 
 
 def _token_ok(authorization: str | None) -> bool:
@@ -44,6 +46,7 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="DevOpsPilot", version="0.1.0", lifespan=lifespan)
+bind_app(app)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[WEB_ORIGIN, "http://localhost:5173", "http://127.0.0.1:5173"],
@@ -54,7 +57,10 @@ app.add_middleware(
 
 
 def _error(status: int, code: str, message: str) -> JSONResponse:
-    return JSONResponse(status_code=status, content=ErrorBody(code=code, message=message).model_dump())
+    return JSONResponse(
+        status_code=status,
+        content=ErrorBody(error=code, code=code, detail=message, message=message).model_dump(),
+    )
 
 
 @app.get("/health")
@@ -96,10 +102,13 @@ def api_mock_rollback(
 
 
 @app.post("/investigate")
-def investigate(body: InvestigateRequest) -> IncidentRecord:
+async def investigate(body: InvestigateRequest) -> Any:
     from backend.graph.workflow import run_investigation
 
-    result = run_investigation(body.prompt, body.scenario_id, body.service)
+    try:
+        result = await run_investigation(body.prompt, body.scenario_id, body.service)
+    except GraphRunError as exc:
+        return _error(exc.status, exc.code, exc.detail)
     decision = Decision.model_validate(result["decision"])
     record = IncidentRecord(
         id=result["incident_id"],

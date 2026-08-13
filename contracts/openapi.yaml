@@ -38,6 +38,18 @@ paths:
                 $ref: "#/components/schemas/IncidentRecord"
         "422":
           description: Validation error
+        "502":
+          description: Gemini or simulated-production tool failed; no fake recommendation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "503":
+          description: Gemini unavailable, timeout, or quota
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /incidents/{id}:
     get:
       operationId: getIncident
@@ -159,9 +171,13 @@ components:
   schemas:
     Error:
       type: object
-      required: [code, message]
+      required: [error, code, detail, message]
       properties:
+        error:
+          type: string
         code:
+          type: string
+        detail:
           type: string
         message:
           type: string

@@ -9,6 +9,6 @@ alwaysApply: false
 - Test behavior and policy, not private function names.
 - No `pytest.skip` / `pytest.xfail` to green CI.
 - Every mutating endpoint needs at least one negative authz test.
-- No real LLM network in unit tests; heuristic path is the CI default.
+- No real LLM network in unit tests; `DEVOPSPILOT_FORCE_HEURISTIC=1` is the CI/pytest path only (not Docker/live).
 - Flaky tests fail the build.
 - Do not rewrite assertions to match buggy code; fix the code or the spec.

@@ -104,7 +104,9 @@ def test_tc20_demo_rollback_then_verify(client: TestClient):
     ops = client.get(f"/ops/{incident_id}")
     assert ops.status_code == 200
     names = [t["agent"] for t in ops.json()["traces"]]
-    assert names == ["planner", "incident", "knowledge", "release", "decision", "verification"]
+    assert names[0] == "planner"
+    assert set(names[1:4]) == {"incident", "knowledge", "release"}
+    assert names[4:] == ["decision", "verification"]
     rb = client.post(
         f"/incidents/{incident_id}/rollback",
         json={"authorized": True, "scenario_id": "tc01_checkout_after_deploy"},

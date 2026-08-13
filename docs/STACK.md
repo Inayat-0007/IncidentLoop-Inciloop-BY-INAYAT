@@ -10,9 +10,9 @@ Do not add frameworks that are not listed. Forbidden alternatives are explicit. 
 | HTTP | **FastAPI** 0.115+ | Pydantic v2 models |
 | Validation | **Pydantic** 2.10+ | Decision and API schemas |
 | Agent graph | **LangGraph** 1.x | One LLM, six nodes |
-| LLM adapters | **LangChain** 1.x + `langchain-openai` / `langchain-google-genai` | Lazy import; heuristic if no key |
+| LLM adapters | **LangChain** 1.x + `langchain-google-genai` | Live path: real Gemini via `ainvoke`. Heuristic is pytest/CI only. |
+| HTTP client | **httpx** 0.28 | Async client for `/api/metrics`, `/api/logs`, `/api/releases/*` (simulated production adapters) |
 | RAG | **ChromaDB** 1.x | Deterministic hash embeddings so CI/Docker work offline |
-| HTTP client | **httpx** 0.28 | Optional; tools prefer in-process sim |
 | MCP | **mcp** 2.x | Stdio server in `mcp_server/` |
 | Tests | **pytest** 8+ / 9 | Fixed scenario suite |
 | Lint | **ruff** | `ruff check` |
@@ -21,14 +21,11 @@ Do not add frameworks that are not listed. Forbidden alternatives are explicit. 
 
 ## LLM
 
-Vendor-neutral. Resolve in this order:
+Live API: **Gemini only** (`GEMINI_API_KEY`, `GEMINI_MODEL`). Timeouts via `GEMINI_TIMEOUT_S`. Failures return HTTP 502/503 — never a fabricated recommendation.
 
-1. `GEMINI_API_KEY` → Gemini via `langchain-google-genai`
-2. `OPENAI_API_KEY` → OpenAI via `langchain-openai`
-3. `AZURE_OPENAI_API_KEY` + `AZURE_OPENAI_ENDPOINT` + `AZURE_OPENAI_DEPLOYMENT` → Azure OpenAI
-4. None of the above → **deterministic heuristic** (required for tests and Docker)
+`DEVOPSPILOT_FORCE_HEURISTIC=1` is **test/CI only** so pytest can score the ~20 scenarios without calling Gemini. Docker and local default is **off**.
 
-Never fail process startup because a paid API key is missing.
+Never fail process startup because a paid API key is missing; fail the investigate request instead.
 
 ## Web (`frontend/`)
 

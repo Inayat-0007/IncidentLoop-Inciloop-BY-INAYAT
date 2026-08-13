@@ -62,5 +62,7 @@ class IncidentRecord(BaseModel):
 
 
 class ErrorBody(BaseModel):
+    error: str
     code: str
+    detail: str
     message: str

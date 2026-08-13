@@ -30,8 +30,13 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt }),
       });
-      if (!r.ok) throw new Error(await r.text());
-      setIncident((await r.json()) as Incident);
+      const body = await r.json().catch(() => null);
+      if (!r.ok) {
+        const msg =
+          (body && (body.detail || body.message || body.error)) || r.statusText;
+        throw new Error(String(msg));
+      }
+      setIncident(body as Incident);
     } catch (err) {
       setError(err instanceof Error ? err.message : "investigate failed");
     } finally {

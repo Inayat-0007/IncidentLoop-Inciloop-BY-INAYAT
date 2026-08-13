@@ -14,7 +14,7 @@ This repository keeps the 2026 vibe-coding harness (`VIBE_CODING_STARTER_PACK_20
 
 ## Simulated production (honest disclaimer)
 
-Metrics, logs, and releases are **in-process mocks**. Nothing talks to a real cluster, Kubernetes, or vendor APM. Rollback only mutates mock state (error_rate ~1.1, latency ~210).
+Metrics, logs, and releases are **simulated production HTTP adapters** (`GET /api/metrics`, `/api/logs`, `/api/releases/latest`). Nothing talks to a real cluster, Kubernetes, or vendor APM. Agents call those routes over HTTP (httpx). Rollback only mutates mock state (error_rate ~1.1, latency ~210). The **LLM is real Gemini**, not a mock.
 
 ## How to run (Windows PowerShell)
 
@@ -53,9 +53,11 @@ python scripts/demo.py
 
 Expected: recommendation `ROLLBACK` with evidence → authorized rollback → metrics recovered.
 
-## LLM keys (optional)
+## LLM keys (required for live investigate)
 
-Set `GEMINI_API_KEY` or `OPENAI_API_KEY` or Azure `AZURE_*` in `.env`. If unset, a **deterministic heuristic** still produces the demo decision so tests and Docker work without paid APIs.
+Set `GEMINI_API_KEY` in `.env` (never commit it). Docker Compose passes `GEMINI_MODEL` through. If Gemini is down, missing, 404, or quota-limited, `POST /investigate` returns **502/503** with `error`, `code`, `detail` — not a fake `ROLLBACK`.
+
+`DEVOPSPILOT_FORCE_HEURISTIC=1` is **pytest/CI only**.
 
 ## Resume bullet
 

@@ -5,9 +5,10 @@ services:
       - "8000:8000"
     environment:
       ROLLBACK_TOKEN: ${ROLLBACK_TOKEN:-replace_me_with_a_local_token}
-      DEVOPSPILOT_FORCE_HEURISTIC: ${DEVOPSPILOT_FORCE_HEURISTIC:-1}
+      DEVOPSPILOT_FORCE_HEURISTIC: ${DEVOPSPILOT_FORCE_HEURISTIC:-0}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      GEMINI_TIMEOUT_S: ${GEMINI_TIMEOUT_S:-20}
       WEB_ORIGIN: http://localhost:8000
     volumes:
       - pilot-data:/app/data

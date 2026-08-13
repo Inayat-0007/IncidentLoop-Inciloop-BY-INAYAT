@@ -4,6 +4,8 @@ from typing import Any
 
 from backend.tools import sim_store
 
+# In-process snapshot for GET /api/releases/latest. Simulated production adapter, not K8s.
+
 
 def get_latest_release(scenario_id: str | None = None) -> dict[str, Any]:
     snap = sim_store.get_scenario(scenario_id)

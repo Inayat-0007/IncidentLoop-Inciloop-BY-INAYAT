@@ -3,11 +3,11 @@ from __future__ import annotations
 from typing import Any
 
 from backend.schemas import Decision, Recommendation
-from backend.tools.monitoring import get_metrics
+from backend.tools.http_client import get_metrics_http
 
 
-def verify(scenario_id: str, service: str, decision: Decision) -> dict[str, Any]:
-    metrics = get_metrics(scenario_id, service)
+async def verify(scenario_id: str, service: str, decision: Decision) -> dict[str, Any]:
+    metrics = await get_metrics_http(scenario_id, service)
     recovered = (
         float(metrics.get("error_rate") or 99) <= 2.0
         and float(metrics.get("latency_ms") or 9999) <= 300
@@ -27,5 +27,5 @@ def verify(scenario_id: str, service: str, decision: Decision) -> dict[str, Any]
         "recovered": recovered,
         "status": status,
         "note": note,
-        "tools": ["monitoring.get_metrics"],
+        "tools": ["GET /api/metrics"],
     }

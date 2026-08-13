@@ -23,7 +23,9 @@ def main() -> None:
             "scenario_id": "tc01_checkout_after_deploy",
         },
     )
-    inv.raise_for_status()
+    if inv.status_code != 200:
+        print("investigate failed:", inv.status_code, inv.text)
+        raise SystemExit(1)
     body = inv.json()
     print("recommendation:", body["decision"]["recommendation"])
     print("confidence:", body["decision"]["confidence"])

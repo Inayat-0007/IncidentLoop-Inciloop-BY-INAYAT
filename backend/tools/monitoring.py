@@ -4,6 +4,9 @@ from typing import Any
 
 from backend.tools import sim_store
 
+# In-process snapshot for GET /api/metrics. Interview "simulated production"
+# adapter — not Datadog, Prometheus, or Kubernetes. Agents call this route over HTTP.
+
 
 def get_metrics(scenario_id: str | None = None, service: str | None = None) -> dict[str, Any]:
     snap = sim_store.get_scenario(scenario_id)

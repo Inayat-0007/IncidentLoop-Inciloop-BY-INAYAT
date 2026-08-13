@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from backend.config import KNOWN_SERVICES
-from backend.llm import complete
+from backend.config import KNOWN_SERVICES, heuristic_enabled
+from backend.llm import acomplete_decision
 from backend.schemas import Decision, Recommendation
 
 
@@ -247,13 +247,40 @@ def heuristic_decision(
     )
 
 
-def decide(**kwargs: Any) -> Decision:
-    decision = heuristic_decision(**kwargs)
-    note = complete(
-        "You are the Decision Agent. Reply with one sentence that restates the structured recommendation. "
-        "Do not invent a different action. Valid actions: ROLLBACK, INVESTIGATE, NO_ACTION, ESCALATE.",
-        f"recommendation={decision.recommendation} reason={decision.reason}",
+async def decide(**kwargs: Any) -> Decision:
+    if heuristic_enabled():
+        return heuristic_decision(**kwargs)
+
+    prompt = kwargs.get("prompt") or ""
+    service = kwargs.get("service") or ""
+    scenario_id = kwargs.get("scenario_id") or "default"
+    metrics = kwargs.get("metrics") or {}
+    logs = kwargs.get("logs") or {}
+    release = kwargs.get("release") or {}
+    docs = kwargs.get("docs") or []
+    payload = {
+        "prompt": prompt,
+        "service": service,
+        "scenario_id": scenario_id,
+        "metrics": metrics,
+        "logs": logs,
+        "release": release,
+        "doc_ids": [d.get("id") for d in docs],
+        "doc_excerpts": [((d.get("text") or "")[:400]) for d in docs[:4]],
+    }
+    parsed = await acomplete_decision(
+        "You are the Decision Agent for DevOpsPilot. "
+        "Fill recommendation, reason, confidence, and evidence from the telemetry. "
+        "recommendation must be one of ROLLBACK, INVESTIGATE, NO_ACTION, ESCALATE. "
+        "Do not execute rollback. Do not invent metrics, logs, or releases. "
+        "If evidence is insufficient for rollback policy, use INVESTIGATE or ESCALATE, never a guessed ROLLBACK.",
+        str(payload),
     )
-    if note:
-        decision = decision.model_copy(update={"reason": f"{decision.reason} LLM: {note}"})
-    return decision
+    return Decision(
+        service=service,
+        observed_metrics=metrics,
+        evidence=list(parsed.evidence),
+        recommendation=Recommendation(parsed.recommendation),
+        reason=parsed.reason.strip(),
+        confidence=min(1.0, max(0.0, float(parsed.confidence))),
+    )

@@ -17,7 +17,7 @@ Non-goals: real Kubernetes control plane, public status page, on-call scheduling
 Defined in `docs/STACK.md` and `docs/ADR/0001-stack.md`. Do not invent libraries. Allowed packages: `ALLOWED_DEPS.md`.
 
 - Python **3.12**, FastAPI, Pydantic, LangGraph, LangChain, ChromaDB, httpx
-- LLM: vendor-neutral via env (`GEMINI_API_KEY` or `OPENAI_API_KEY` or `AZURE_*`). If no key, **must** run via deterministic heuristic fallback (CI and Docker).
+- LLM: **Gemini required** for live `POST /investigate` (`GEMINI_API_KEY`). `DEVOPSPILOT_FORCE_HEURISTIC=1` is **test/CI only** — never a silent production fallback that fabricates ROLLBACK. If Gemini fails, the API returns 502/503 (`error`, `code`, `detail`).
 - React (Vite + TypeScript) AgentOps dashboard
 - MCP server wrapping the same tools
 - Docker Compose

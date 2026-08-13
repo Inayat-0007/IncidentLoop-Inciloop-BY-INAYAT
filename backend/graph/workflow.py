@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import operator
 import time
 import uuid
-from typing import Any, TypedDict
+from typing import Annotated, Any, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 
@@ -12,7 +13,9 @@ from backend.agents.knowledge import retrieve_knowledge
 from backend.agents.planner import extract_service, plan_steps, resolve_scenario
 from backend.agents.release import inspect_release
 from backend.agents.verification import verify
-from backend.llm import complete, stable_ms
+from backend.config import heuristic_enabled
+from backend.errors import GraphRunError, LlmError
+from backend.llm import acomplete, stable_ms
 from backend.schemas import AgentTrace, Decision
 
 
@@ -29,129 +32,174 @@ class GraphState(TypedDict, total=False):
     release: dict[str, Any]
     decision: dict[str, Any]
     verification: dict[str, Any]
-    traces: list[dict[str, Any]]
+    traces: Annotated[list[dict[str, Any]], operator.add]
+    node_errors: Annotated[list[str], operator.add]
 
 
 def _trace(agent: str, duration_ms: float, **kwargs: Any) -> dict[str, Any]:
     return AgentTrace(agent=agent, duration_ms=duration_ms, **kwargs).model_dump()
 
 
-def planner_node(state: GraphState) -> GraphState:
+async def planner_node(state: GraphState) -> GraphState:
     t0 = time.perf_counter()
-    prompt = state.get("prompt") or ""
-    scenario_id = resolve_scenario(prompt, state.get("scenario_id"))
-    service = extract_service(prompt, state.get("service"))
-    plan = plan_steps(service, scenario_id)
-    llm = complete("You are the Planner Agent. Output a short numbered plan. Never execute rollback.", plan)
-    traces = list(state.get("traces") or [])
-    traces.append(
+    try:
+        prompt = state.get("prompt") or ""
+        scenario_id = resolve_scenario(prompt, state.get("scenario_id"))
+        service = extract_service(prompt, state.get("service"))
+        plan = plan_steps(service, scenario_id)
+        if heuristic_enabled():
+            plan_out = plan
+        else:
+            plan_out = await acomplete(
+                "You are the Planner Agent. Output a short numbered plan. Never execute rollback.",
+                plan,
+            )
+        status = "ok"
+        errors: list[str] = []
+    except (LlmError, GraphRunError):
+        raise
+    except Exception as exc:
+        raise GraphRunError(502, "planner_failed", f"Planner failed ({type(exc).__name__})") from exc
+    traces = [
         _trace(
             "planner",
             (time.perf_counter() - t0) * 1000 or stable_ms("planner"),
             tools_used=[],
-            status="ok",
+            status=status,
         )
-    )
+    ]
     return {
-        **state,
         "incident_id": state.get("incident_id") or f"inc_{uuid.uuid4().hex[:10]}",
         "scenario_id": scenario_id,
         "service": service,
-        "plan": llm or plan,
+        "plan": plan_out,
         "traces": traces,
+        "node_errors": errors,
     }
 
 
-def incident_node(state: GraphState) -> GraphState:
+async def incident_node(state: GraphState) -> GraphState:
     t0 = time.perf_counter()
-    result = investigate(state["scenario_id"], state["service"])
-    traces = list(state.get("traces") or [])
-    traces.append(
-        _trace(
-            "incident",
-            (time.perf_counter() - t0) * 1000,
-            tools_used=result["tools"],
-            status="ok",
-        )
-    )
-    return {**state, "metrics": result["metrics"], "logs": result["logs"], "traces": traces}
+    try:
+        result = await investigate(state["scenario_id"], state["service"])
+    except (LlmError, GraphRunError):
+        raise
+    except Exception as exc:
+        raise GraphRunError(502, "tool_upstream", f"Incident tools failed ({type(exc).__name__})") from exc
+    return {
+        "metrics": result["metrics"],
+        "logs": result["logs"],
+        "traces": [
+            _trace(
+                "incident",
+                (time.perf_counter() - t0) * 1000,
+                tools_used=result["tools"],
+                status="ok",
+            )
+        ],
+    }
 
 
-def knowledge_node(state: GraphState) -> GraphState:
+async def knowledge_node(state: GraphState) -> GraphState:
     t0 = time.perf_counter()
-    query = (
-        f"{state.get('prompt')} {state.get('service')} checkout 500 deploy database timeout rollback policy"
-    )
-    result = retrieve_knowledge(query)
-    traces = list(state.get("traces") or [])
-    traces.append(
-        _trace(
-            "knowledge",
-            (time.perf_counter() - t0) * 1000,
-            tools_used=result["tools"],
-            docs_retrieved=result["ids"],
-            status="ok",
+    try:
+        query = (
+            f"{state.get('prompt')} {state.get('service')} checkout 500 deploy database timeout rollback policy"
         )
-    )
-    return {**state, "docs": result["docs"], "doc_ids": result["ids"], "traces": traces}
+        result = await retrieve_knowledge(query)
+    except (LlmError, GraphRunError):
+        raise
+    except Exception as exc:
+        raise GraphRunError(502, "knowledge_failed", f"Knowledge retrieve failed ({type(exc).__name__})") from exc
+    return {
+        "docs": result["docs"],
+        "doc_ids": result["ids"],
+        "traces": [
+            _trace(
+                "knowledge",
+                (time.perf_counter() - t0) * 1000,
+                tools_used=result["tools"],
+                docs_retrieved=result["ids"],
+                status="ok",
+            )
+        ],
+    }
 
 
-def release_node(state: GraphState) -> GraphState:
+async def release_node(state: GraphState) -> GraphState:
     t0 = time.perf_counter()
-    result = inspect_release(state["scenario_id"])
-    traces = list(state.get("traces") or [])
-    traces.append(
-        _trace(
-            "release",
-            (time.perf_counter() - t0) * 1000,
-            tools_used=result["tools"],
-            status="ok",
-        )
-    )
-    return {**state, "release": result["release"], "traces": traces}
+    try:
+        result = await inspect_release(state["scenario_id"])
+    except (LlmError, GraphRunError):
+        raise
+    except Exception as exc:
+        raise GraphRunError(502, "tool_upstream", f"Release tool failed ({type(exc).__name__})") from exc
+    return {
+        "release": result["release"],
+        "traces": [
+            _trace(
+                "release",
+                (time.perf_counter() - t0) * 1000,
+                tools_used=result["tools"],
+                status="ok",
+            )
+        ],
+    }
 
 
-def decision_node(state: GraphState) -> GraphState:
+async def decision_node(state: GraphState) -> GraphState:
     t0 = time.perf_counter()
-    decision: Decision = decide(
-        prompt=state.get("prompt") or "",
-        service=state.get("service") or "",
-        scenario_id=state.get("scenario_id") or "default",
-        metrics=state.get("metrics") or {},
-        logs=state.get("logs") or {},
-        release=state.get("release") or {},
-        docs=state.get("docs") or [],
-    )
-    traces = list(state.get("traces") or [])
-    traces.append(
-        _trace(
-            "decision",
-            (time.perf_counter() - t0) * 1000,
-            tools_used=[],
-            recommendation=decision.recommendation.value,
-            confidence=decision.confidence,
-            status="ok",
+    try:
+        decision: Decision = await decide(
+            prompt=state.get("prompt") or "",
+            service=state.get("service") or "",
+            scenario_id=state.get("scenario_id") or "default",
+            metrics=state.get("metrics") or {},
+            logs=state.get("logs") or {},
+            release=state.get("release") or {},
+            docs=state.get("docs") or [],
         )
-    )
-    return {**state, "decision": decision.model_dump(), "traces": traces}
+    except (LlmError, GraphRunError):
+        raise
+    except Exception as exc:
+        raise GraphRunError(502, "decision_failed", f"Decision failed ({type(exc).__name__})") from exc
+    return {
+        "decision": decision.model_dump(),
+        "traces": [
+            _trace(
+                "decision",
+                (time.perf_counter() - t0) * 1000,
+                tools_used=[],
+                recommendation=decision.recommendation.value,
+                confidence=decision.confidence,
+                status="ok",
+            )
+        ],
+    }
 
 
-def verification_node(state: GraphState) -> GraphState:
+async def verification_node(state: GraphState) -> GraphState:
     t0 = time.perf_counter()
-    decision = Decision.model_validate(state["decision"])
-    result = verify(state["scenario_id"], state["service"], decision)
-    traces = list(state.get("traces") or [])
-    traces.append(
-        _trace(
-            "verification",
-            (time.perf_counter() - t0) * 1000,
-            tools_used=result["tools"],
-            recommendation=decision.recommendation.value,
-            confidence=decision.confidence,
-            status=result["status"],
-        )
-    )
-    return {**state, "verification": result, "traces": traces}
+    try:
+        decision = Decision.model_validate(state["decision"])
+        result = await verify(state["scenario_id"], state["service"], decision)
+    except (LlmError, GraphRunError):
+        raise
+    except Exception as exc:
+        raise GraphRunError(502, "verification_failed", f"Verification failed ({type(exc).__name__})") from exc
+    return {
+        "verification": result,
+        "traces": [
+            _trace(
+                "verification",
+                (time.perf_counter() - t0) * 1000,
+                tools_used=result["tools"],
+                recommendation=decision.recommendation.value,
+                confidence=decision.confidence,
+                status=result["status"],
+            )
+        ],
+    }
 
 
 def build_graph():
@@ -163,9 +211,12 @@ def build_graph():
     g.add_node("decision", decision_node)
     g.add_node("verification", verification_node)
     g.add_edge(START, "planner")
+    # Independent tool/RAG work runs concurrently after plan.
     g.add_edge("planner", "incident")
-    g.add_edge("incident", "knowledge")
-    g.add_edge("knowledge", "release")
+    g.add_edge("planner", "knowledge")
+    g.add_edge("planner", "release")
+    g.add_edge("incident", "decision")
+    g.add_edge("knowledge", "decision")
     g.add_edge("release", "decision")
     g.add_edge("decision", "verification")
     g.add_edge("verification", END)
@@ -182,14 +233,15 @@ def get_app():
     return _APP
 
 
-def run_investigation(prompt: str, scenario_id: str | None = None, service: str | None = None) -> GraphState:
+async def run_investigation(prompt: str, scenario_id: str | None = None, service: str | None = None) -> GraphState:
     app = get_app()
     initial: GraphState = {
         "prompt": prompt,
         "traces": [],
+        "node_errors": [],
     }
     if scenario_id:
         initial["scenario_id"] = scenario_id
     if service:
         initial["service"] = service
-    return app.invoke(initial)
+    return await app.ainvoke(initial)

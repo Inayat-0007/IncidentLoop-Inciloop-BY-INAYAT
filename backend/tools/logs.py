@@ -4,6 +4,8 @@ from typing import Any
 
 from backend.tools import sim_store
 
+# In-process snapshot for GET /api/logs. Simulated production adapter, not a log vendor.
+
 
 def get_logs(scenario_id: str | None = None, service: str | None = None) -> dict[str, Any]:
     snap = sim_store.get_scenario(scenario_id)

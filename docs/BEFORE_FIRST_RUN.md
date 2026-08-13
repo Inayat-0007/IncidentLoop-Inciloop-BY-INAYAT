@@ -26,10 +26,16 @@ flowchart TB
     R[release]
     D[decision]
     V[verification]
-    P --> I --> K --> R --> D --> V
+    P --> I
+    P --> K
+    P --> R
+    I --> D
+    K --> D
+    R --> D
+    D --> V
   end
 
-  subgraph tools ["Mock production in-process"]
+  subgraph tools ["Simulated production HTTP adapters"]
     Mon["tools/monitoring.py"]
     Logs["tools/logs.py"]
     Rel["tools/release.py"]
@@ -92,15 +98,15 @@ Docker Compose is **one** `api` service on port 8000. If `frontend/dist` exists 
 | `docker-compose.yml` | Single `api` service, `8000:8000`, volume `pilot-data` |
 | `Dockerfile` | Multi-stage: Node builds UI, Python 3.12 runs uvicorn as `appuser` |
 | `backend/main.py` | FastAPI app, CORS, routes, lifespan ingest |
-| `backend/config.py` | `load_dotenv()`, paths, `ROLLBACK_TOKEN`, `WEB_ORIGIN`, heuristic flag |
+| `backend/config.py` | `load_dotenv()`, paths, `ROLLBACK_TOKEN`, `WEB_ORIGIN`, test-only heuristic flag, timeouts |
 | `backend/schemas.py` | Pydantic request/decision/incident/trace models |
-| `backend/llm.py` | Optional Gemini/Azure/OpenAI; heuristic if no key |
-| `backend/graph/workflow.py` | LangGraph: planner → incident → knowledge → release → decision → verification |
+| `backend/llm.py` | Real Gemini `ainvoke`; raises on failure (no silent heuristic) |
+| `backend/graph/workflow.py` | LangGraph: planner → parallel (incident, knowledge, release) → decision → verification |
 | `backend/agents/planner.py` | Extract service + scenario; numbered plan (no rollback) |
-| `backend/agents/incident.py` | Calls mock metrics + logs |
-| `backend/agents/knowledge.py` | RAG retrieve |
-| `backend/agents/release.py` | Latest mock release |
-| `backend/agents/decision.py` | Heuristic recommendation (+ optional LLM restatement) |
+| `backend/agents/incident.py` | HTTP GET `/api/metrics` + `/api/logs` (parallel) |
+| `backend/agents/knowledge.py` | RAG retrieve (thread offload) |
+| `backend/agents/release.py` | HTTP GET `/api/releases/latest` |
+| `backend/agents/decision.py` | Gemini JSON decision, or heuristic when `DEVOPSPILOT_FORCE_HEURISTIC=1` (tests only) |
 | `backend/agents/verification.py` | Re-reads metrics; does **not** execute rollback |
 | `backend/tools/sim_store.py` | In-memory scenario snapshots |
 | `backend/tools/monitoring.py` | `get_metrics` |
@@ -146,15 +152,13 @@ Docker Compose is **one** `api` service on port 8000. If `frontend/dist` exists 
 Default UI prompt (`frontend/src/App.tsx`): checkout-api 500 after latest deploy. Planner maps that to scenario `tc01_checkout_after_deploy` (`backend/agents/planner.py`).
 
 1. **User prompt** → `POST /investigate` JSON `{ "prompt": "...", "scenario_id"?: string, "service"?: string }` (`InvestigateRequest` requires `prompt`).
-2. **Planner** (`planner` node) — extract service/scenario; optional LLM plan; **does not** call rollback.
-3. **Incident** — in-process `monitoring.get_metrics` + `logs.get_logs` (same data as `GET /api/metrics` and `GET /api/logs`).
-4. **Knowledge** — `rag.retrieve` over `knowledge/**/*.md` (also ingested to Chroma on API startup).
-5. **Release** — in-process `release.get_latest_release` (same as `GET /api/releases/latest`).
-6. **Decision** — heuristic (and optional LLM one-liner). Killer path: `recommendation: "ROLLBACK"`, confidence ≥ 0.7, ≥ 3 evidence bullets.
-7. **Verification** (graph) — reads metrics **again**; after investigate, sim is still degraded → `status: "pending_authorization"`. Graph **does not** call rollback tools.
-8. Record saved: SQLite `data/memory.sqlite` + `data/memory.json`. Response is `IncidentRecord` (`id`, `prompt`, `scenario_id`, `service`, `status`, `decision`, `verification`, `traces`, `release`, `logs`).
-9. **Human-authorized execute** → `POST /incidents/{incident_id}/rollback` with `Authorization: Bearer $ROLLBACK_TOKEN` and JSON `{ "authorized": true, "scenario_id"?: "..." }`. Policy gate (`backend/policy/gate.py`) requires token, `authorized=true`, recommendation `ROLLBACK`, confidence ≥ 0.7, ≥ 3 evidence items, current release, rollback target. Then `rollback_release` mutates sim.
-10. Response incident `status: "verified"`; `verification.metrics` recovered (`error_rate` 1.1, `latency_ms` 210). Optional: `GET /ops/{incident_id}` for traces; `GET /incidents/{incident_id}` for stored record.
+2. **Planner** (`planner` node) — extract service/scenario; Gemini plan (heuristic template in tests); **does not** call rollback.
+3. **Incident + knowledge + release in parallel** — HTTP `GET /api/metrics` and `GET /api/logs`, RAG retrieve, HTTP `GET /api/releases/latest`.
+4. **Decision** — live: Gemini JSON (`ROLLBACK`/`INVESTIGATE`/`NO_ACTION`/`ESCALATE`). Tests: deterministic heuristic. Killer path still needs confidence ≥ 0.7 and ≥ 3 evidence bullets before a human can execute rollback.
+5. **Verification** (graph) — HTTP metrics again; after investigate, sim is still degraded → `status: "pending_authorization"`. Graph **does not** call rollback tools.
+6. Record saved: SQLite `data/memory.sqlite` + `data/memory.json`. Response is `IncidentRecord` (`id`, `prompt`, `scenario_id`, `service`, `status`, `decision`, `verification`, `traces`, `release`, `logs`).
+7. **Human-authorized execute** → `POST /incidents/{incident_id}/rollback` with `Authorization: Bearer $ROLLBACK_TOKEN` and JSON `{ "authorized": true, "scenario_id"?: "..." }`. Policy gate (`backend/policy/gate.py`) requires token, `authorized=true`, recommendation `ROLLBACK`, confidence ≥ 0.7, ≥ 3 evidence items, current release, rollback target. Then `rollback_release` mutates sim.
+8. Response incident `status: "verified"`; `verification.metrics` recovered (`error_rate` 1.1, `latency_ms` 210). Optional: `GET /ops/{incident_id}` for traces; `GET /incidents/{incident_id}` for stored record.
 
 Direct mock mutate (same token + `authorized: true`): `POST /api/releases/rollback` — **not** used by the AgentOps UI; UI uses `/incidents/{id}/rollback`.
 
@@ -167,13 +171,13 @@ Direct mock mutate (same token + `authorized: true`): `POST /api/releases/rollba
 | Browser `http://localhost:5173` | FastAPI `127.0.0.1:8000` | Vite **dev proxy** for `/investigate`, `/incidents`, `/ops`, `/api`, `/health` (`frontend/vite.config.ts`). UI `fetch` uses **relative** paths; there is **no** `VITE_API_*` env. |
 | Browser origin vs API | CORS | `WEB_ORIGIN` plus hardcoded `http://localhost:5173` and `http://127.0.0.1:5173`. Methods GET/POST/OPTIONS. Headers `Authorization`, `Content-Type`. `allow_credentials=False`. |
 | Docker UI | Same origin `:8000` | Compose sets `WEB_ORIGIN=http://localhost:8000`. Image copies `frontend/dist`; FastAPI mounts `/assets` and `GET /`. |
-| Graph agents | Mock tools | **In-process Python**, not HTTP. `/api/*` is the HTTP face of the same functions. |
+| Graph agents | Simulated production `/api/*` | **httpx.AsyncClient** + ASGI to `GET /api/metrics`, `/api/logs`, `/api/releases/latest`. Same FastAPI adapters the UI/curl use. Not Datadog/K8s. |
 | RAG ingest | Disk | `CHROMA_PATH` default `./data/chroma` (`backend/config.py`). Collection name `devopspilot`. |
 | Runtime retrieve | Markdown files | `retriever.py` scores `knowledge/` on disk (does not query Chroma at retrieve time). |
 | Memory | Disk | `DATA_DIR/memory.sqlite` and `DATA_DIR/memory.json`. Default `DATA_DIR=./data`. |
 | MCP product server | Same mocks | **stdio** via `python mcp_server/server.py` (`mcp.run()`). Cursor: `.cursor/mcp.json` server `devopspilot`. **No HTTP MCP port** in this repo. |
 | Cursor GitHub/GitLab MCP | External | Optional `npx` servers; tokens `${env:GITHUB_TOKEN}` / `${env:GITLAB_TOKEN}`. **Not** used by FastAPI or the demo. |
-| LLM | Vendor APIs | Only if keys set and `DEVOPSPILOT_FORCE_HEURISTIC` is not truthy. Graph still works without them. |
+| LLM | Gemini | Required for live investigate. Failures are HTTP 502/503. Heuristic is pytest/CI only (`DEVOPSPILOT_FORCE_HEURISTIC=1`). |
 
 ## 6. Environment variables
 
@@ -191,25 +195,21 @@ From `.env.example` (and a few names read in code but not listed there):
 | `WEB_ORIGIN` | Optional | CORS in `backend/main.py` | Default `http://localhost:5173`. Docker Compose overrides to `http://localhost:8000`. |
 | `DATA_DIR` | Optional | config, memory, ingest | Default `./data` |
 | `CHROMA_PATH` | Optional | `rag/ingest.py` | Default `./data/chroma` |
-| `DEVOPSPILOT_FORCE_HEURISTIC` | Optional | `backend/llm.py` via `FORCE_HEURISTIC` | `1` / `true` / `True` skips LLM even if keys exist. CI and Docker default **on**. Local `.env.example` is `0`. |
-| `GEMINI_API_KEY` | Optional | `llm.py` (first if set) | Heuristic if empty |
-| `OPENAI_API_KEY` | Optional | `llm.py` (if no Gemini and no Azure) | Heuristic if empty |
-| `AZURE_OPENAI_API_KEY` | Optional | `llm.py` (after Gemini, before OpenAI) | Needs endpoint + deployment to actually call |
-| `AZURE_OPENAI_ENDPOINT` | Optional | `llm.py` | |
-| `AZURE_OPENAI_DEPLOYMENT` | Optional | `llm.py` | |
-| `AZURE_OPENAI_API_VERSION` | Optional | `llm.py` | Default `2024-10-21` |
+| `DEVOPSPILOT_FORCE_HEURISTIC` | Test/CI only | `heuristic_enabled()` | Default **0**. `1` enables deterministic decisions for pytest. Never the live Docker default. |
+| `GEMINI_API_KEY` | **Yes for live investigate** | `llm.py` | Missing/failed Gemini → 503/502, not a fake ROLLBACK |
+| `GEMINI_MODEL` | Optional | `llm.py` | Default `gemini-2.5-flash`. Compose passes through from `.env`. |
+| `GEMINI_TIMEOUT_S` | Optional | `llm.py` | Default `20` |
 | `APP_ENV` | Documented only | **Not read** by Python | Placeholder in `.env.example` |
 | `API_HOST` | Documented only | **Not read** by Python | Uvicorn host comes from the CLI (`127.0.0.1` local / `0.0.0.0` Docker) |
 | `API_PORT` | Documented only | **Not read** by Python | Use `--port 8000` |
 | `GITHUB_TOKEN` | Optional OS env | `.cursor/mcp.json` only (commented in `.env.example`) | Not a product API key |
 | `GITLAB_TOKEN` | Optional OS env | `.cursor/mcp.json` only | Not a product API key |
 
-Also used in code, **not** in `.env.example`:
+Also used in code:
 
 | Name | Default | Where |
 |---|---|---|
-| `GEMINI_MODEL` | `gemini-2.0-flash` | `backend/llm.py` |
-| `OPENAI_MODEL` | `gpt-4o-mini` | `backend/llm.py` |
+| `GEMINI_MODEL` | `gemini-2.5-flash` | `backend/llm.py` (also in `.env.example`) |
 
 `python-dotenv` loads `.env` from the process cwd when `backend.config` is imported.
 
@@ -289,7 +289,7 @@ python scripts/demo.py
 
 Expect: `recommendation: ROLLBACK`, evidence lines, `after rollback: ... error_rate 1.1 ... latency_ms 210`, `demo ok`.
 
-9. Docker alternative (heuristic forced; LLM keys optional).
+9. Docker alternative (Gemini required unless you explicitly set `DEVOPSPILOT_FORCE_HEURISTIC=1`).
 
 ```powershell
 docker compose up --build
@@ -313,7 +313,7 @@ Expected: `{"status":"ok"}`
 curl.exe -s -X POST http://127.0.0.1:8000/investigate -H "Content-Type: application/json" -d "{\"prompt\":\"checkout-api is throwing 500 after the latest deploy\",\"scenario_id\":\"tc01_checkout_after_deploy\"}"
 ```
 
-Expected JSON fields (Pydantic `IncidentRecord`): `id`, `prompt`, `scenario_id`, `service`, `status` (`recommended`), `decision` (`service`, `observed_metrics`, `evidence`, `recommendation`, `reason`, `confidence`), `verification`, `traces` (agents `planner`, `incident`, `knowledge`, `release`, `decision`, `verification`), `release`, `logs`. For this scenario `decision.recommendation` should be `ROLLBACK`.
+Expected: 200 with `IncidentRecord` and a Gemini-backed `decision.reason`, **or** 502/503 `{error, code, detail}` if Gemini is down — never a silent fake ROLLBACK.
 
 Mock telemetry (same sim):
 
@@ -345,11 +345,10 @@ Via Vite: same paths on `http://localhost:5173` (proxied).
 - No Datadog / Prometheus / vendor APM — metrics are `sim_store`.
 - No GitHub/GitLab **product** deploy API. Cursor MCP GitHub/GitLab entries are optional IDE servers, unused by FastAPI.
 - No Slack/PagerDuty writes, on-call, public status page, or auto-rollback without a human.
-- LLM is **optional**. Missing keys or `DEVOPSPILOT_FORCE_HEURISTIC=1` → deterministic heuristic (`backend/agents/decision.py`). Docker/CI force heuristic.
-- Agents do not HTTP-call `/api/*`; those routes exist for humans/UI/curl/MCP-equivalent inspection.
+- LLM is **required** for live investigate (Gemini). Missing keys / 404 / quota → 502/503. `DEVOPSPILOT_FORCE_HEURISTIC=1` is pytest/CI only.
+- Agents HTTP-call `/api/*` (ASGI httpx) for metrics/logs/releases. Those adapters read `sim_store`, not Datadog/K8s.
 - Chroma is written on ingest; **retrieve** is keyword-over-markdown, so a missing Chroma dir does not block investigate if `knowledge/` exists.
 - `APP_ENV` / `API_HOST` / `API_PORT` in `.env.example` are unused by application code.
-- `httpx` is for `scripts/verify_allowed_deps.py` (PyPI), not mock tools.
 - Previous Node/Next/Hono IncidentLoop apps are **removed** (`docs/DEPRECATED_NODE.md`).
 
 ## 12. Troubleshooting
@@ -365,7 +364,8 @@ Via Vite: same paths on `http://localhost:5173` (proxied).
 | Rollback 409 `policy_denied` | Gate refused: not ROLLBACK, low confidence, few evidence bullets, or missing release/target. |
 | CORS in the browser | Hit the UI on 5173 (proxy) or 8000 (Docker SPA). Custom origins: set `WEB_ORIGIN`. |
 | Frontend talks to the wrong host | No API base URL env — Vite proxy must reach `127.0.0.1:8000`. Start uvicorn first. |
-| pytest wants LLM | Tests set `DEVOPSPILOT_FORCE_HEURISTIC=1`. Do not skip the policy tests to “make it pass”. |
+| pytest wants LLM | Tests set `DEVOPSPILOT_FORCE_HEURISTIC=1`. That flag is **not** for Docker/production. |
+| Investigate 502/503 | Gemini missing, timeout, 404 model, or quota. No fabricated recommendation. Check `GEMINI_MODEL` / key (never log the key). |
 | `Activate.ps1` blocked | Use `.venv\Scripts\python.exe -m uvicorn ...` instead. |
 | Python 3.14 locally vs 3.12 CI | Prefer 3.12 to match CI. |
 

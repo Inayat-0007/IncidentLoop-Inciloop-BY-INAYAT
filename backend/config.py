@@ -15,7 +15,15 @@ MEMORY_PATH = DATA_DIR / "memory.sqlite"
 
 ROLLBACK_TOKEN = os.getenv("ROLLBACK_TOKEN", "replace_me_with_a_local_token")
 WEB_ORIGIN = os.getenv("WEB_ORIGIN", "http://localhost:5173")
-FORCE_HEURISTIC = os.getenv("DEVOPSPILOT_FORCE_HEURISTIC", "0") in {"1", "true", "True"}
+
+# TEST/CI ONLY. Default is off: live /investigate requires real Gemini.
+# pytest and GitHub Actions set DEVOPSPILOT_FORCE_HEURISTIC=1.
+def heuristic_enabled() -> bool:
+    return os.getenv("DEVOPSPILOT_FORCE_HEURISTIC", "0") in {"1", "true", "True"}
+
+
+GEMINI_TIMEOUT_S = float(os.getenv("GEMINI_TIMEOUT_S", "20"))
+TOOL_TIMEOUT_S = float(os.getenv("TOOL_TIMEOUT_S", "5"))
 
 KNOWN_SERVICES = frozenset(
     {"checkout-api", "payment-api", "inventory-api", "auth-api", "catalog-api"}
