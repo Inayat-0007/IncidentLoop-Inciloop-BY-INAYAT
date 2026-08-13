@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "type": "prompt",
+        "prompt": "Read AGENTS.md and the current spec under docs/specs/ before editing. Do not invent stack, routes, or secrets.",
+        "timeout": 10
+      }
+    ],
+    "beforeShellExecution": [
+      {
+        "command": "node .cursor/hooks/allow-install.mjs",
+        "failClosed": true,
+        "timeout": 15
+      }
+    ],
+    "afterFileEdit": [
+      {
+        "command": "node .cursor/hooks/block-secrets.mjs",
+        "failClosed": true,
+        "timeout": 15
+      }
+    ],
+    "beforeMCPExecution": [
+      {
+        "command": "node .cursor/hooks/allow-mcp.mjs",
+        "failClosed": true,
+        "timeout": 10
+      }
+    ]
+  }
+}

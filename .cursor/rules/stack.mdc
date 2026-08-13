@@ -1,0 +1,11 @@
+---
+alwaysApply: true
+---
+
+# Stack
+
+Stack is defined in `docs/STACK.md` (ADR `docs/ADR/0001-stack.md`). Do not add frameworks.
+
+Allowed packages: `ALLOWED_DEPS.md`. Before any install, use skill `verify-deps` and confirm the name exists on PyPI (or npm for `frontend/`). Run `python scripts/verify_allowed_deps.py`.
+
+Forbidden without a new ADR: Django, Flask, Express, Nest, Hono, Next.js, Prisma, MongoDB, Redux, Vue.

@@ -1,0 +1,13 @@
+---
+description: AgentOps UI conventions
+globs: frontend/**
+alwaysApply: false
+---
+
+# Frontend (`frontend/`)
+
+- Vite + React + TypeScript only (`docs/STACK.md`).
+- Call the API via paths in `contracts/openapi.yaml`.
+- Accessibility: semantic HTML, labels on inputs, keyboard operable.
+- Do not use `dangerouslySetInnerHTML` for prompts, evidence, or traces.
+- Keep the AgentOps dashboard to the incident + trace layout in the PRD.

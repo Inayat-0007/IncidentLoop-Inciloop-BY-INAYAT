@@ -1,0 +1,49 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+dist/
+.next/
+coverage/
+playwright-report/
+test-results/
+*.tsbuildinfo
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Data / RAG persist
+data/*.sqlite
+data/memory.json
+data/chroma/
+!data/README.md
+
+# Secrets and env
+.env
+.env.local
+.env.*.local
+!.env.example
+*.pem
+*.p12
+*.key
+id_rsa
+id_ed25519
+credentials.json
+service-account*.json
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+
+# Agent junk
+.cursor/plans/*.scratch.md
+*.orig
+
+# Logs
+*.log
+logs/

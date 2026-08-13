@@ -1,0 +1,294 @@
+openapi: 3.0.3
+info:
+  title: DevOpsPilot API
+  version: 0.1.0
+  description: Simulated production incident and release assistant. Not a live cluster API.
+servers:
+  - url: http://localhost:8000
+paths:
+  /health:
+    get:
+      operationId: health
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+  /investigate:
+    post:
+      operationId: investigate
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvestigateRequest"
+      responses:
+        "200":
+          description: Investigation complete
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IncidentRecord"
+        "422":
+          description: Validation error
+  /incidents/{id}:
+    get:
+      operationId: getIncident
+      parameters:
+        - $ref: "#/components/parameters/IncidentId"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IncidentRecord"
+        "404":
+          description: Not found
+  /incidents/{id}/rollback:
+    post:
+      operationId: executeRollback
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/IncidentId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RollbackRequest"
+      responses:
+        "200":
+          description: Rollback executed and verified
+        "401":
+          description: Missing/invalid token
+        "403":
+          description: Not explicitly authorized
+        "409":
+          description: Policy gate refused
+  /ops/{id}:
+    get:
+      operationId: getOpsTraces
+      parameters:
+        - $ref: "#/components/parameters/IncidentId"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OpsTraces"
+  /api/metrics:
+    get:
+      operationId: mockMetrics
+      parameters:
+        - $ref: "#/components/parameters/ScenarioId"
+        - $ref: "#/components/parameters/Service"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Metrics"
+  /api/logs:
+    get:
+      operationId: mockLogs
+      parameters:
+        - $ref: "#/components/parameters/ScenarioId"
+        - $ref: "#/components/parameters/Service"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Logs"
+  /api/releases/latest:
+    get:
+      operationId: mockLatestRelease
+      parameters:
+        - $ref: "#/components/parameters/ScenarioId"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Release"
+  /api/releases/rollback:
+    post:
+      operationId: mockRollback
+      security:
+        - bearerAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MockRollbackRequest"
+      responses:
+        "200":
+          description: Sim state set to healthy
+        "401":
+          description: Unauthorized
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    IncidentId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    ScenarioId:
+      name: scenario_id
+      in: query
+      schema:
+        type: string
+    Service:
+      name: service
+      in: query
+      schema:
+        type: string
+  schemas:
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+    InvestigateRequest:
+      type: object
+      required: [prompt]
+      properties:
+        prompt:
+          type: string
+        scenario_id:
+          type: string
+        service:
+          type: string
+    RollbackRequest:
+      type: object
+      required: [authorized]
+      properties:
+        authorized:
+          type: boolean
+        scenario_id:
+          type: string
+    MockRollbackRequest:
+      type: object
+      properties:
+        scenario_id:
+          type: string
+        authorized:
+          type: boolean
+    Decision:
+      type: object
+      required:
+        - service
+        - observed_metrics
+        - evidence
+        - recommendation
+        - reason
+        - confidence
+      properties:
+        service:
+          type: string
+        observed_metrics:
+          type: object
+          additionalProperties: true
+        evidence:
+          type: array
+          items:
+            type: string
+        recommendation:
+          type: string
+          enum: [ROLLBACK, INVESTIGATE, NO_ACTION, ESCALATE]
+        reason:
+          type: string
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
+    IncidentRecord:
+      type: object
+      required: [id, prompt, status, decision]
+      properties:
+        id:
+          type: string
+        prompt:
+          type: string
+        scenario_id:
+          type: string
+        service:
+          type: string
+        status:
+          type: string
+        decision:
+          $ref: "#/components/schemas/Decision"
+        verification:
+          type: object
+        traces:
+          type: array
+          items:
+            type: object
+    OpsTraces:
+      type: object
+      required: [incident_id, traces]
+      properties:
+        incident_id:
+          type: string
+        traces:
+          type: array
+          items:
+            type: object
+        runtime_ms:
+          type: number
+        recommendation:
+          type: string
+        confidence:
+          type: number
+        status:
+          type: string
+    Metrics:
+      type: object
+      properties:
+        service:
+          type: string
+        error_rate:
+          type: number
+        latency_ms:
+          type: number
+        status:
+          type: string
+    Logs:
+      type: object
+      properties:
+        service:
+          type: string
+        lines:
+          type: array
+          items:
+            type: string
+        missing:
+          type: boolean
+    Release:
+      type: object
+      properties:
+        service:
+          type: string
+        version:
+          type: string
+        previous:
+          type: string
+          nullable: true
+        rollback_available:
+          type: boolean

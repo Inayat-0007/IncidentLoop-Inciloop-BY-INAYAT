@@ -1,0 +1,14 @@
+---
+alwaysApply: true
+---
+
+# Security
+
+- Rollback execution requires `Authorization: Bearer $ROLLBACK_TOKEN` and JSON `authorized: true`.
+- The LangGraph workflow must not call rollback tools.
+- Encode output; no `dangerouslySetInnerHTML` without a sanitizer ADR.
+- Do not log tokens, cookies, Authorization, or API keys.
+- Secrets from environment only (`docs/SECURITY.md`, `.env.example` names).
+- Negative tests for unauthorized rollback on mutating endpoints.
+- Never disable the policy gate to make tests or clients pass.
+- Full abuse cases: `docs/THREAT_MODEL.md`. Use skill `threat-pass` on features.

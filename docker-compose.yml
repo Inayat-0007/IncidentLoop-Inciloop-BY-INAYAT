@@ -1,0 +1,13 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      ROLLBACK_TOKEN: ${ROLLBACK_TOKEN:-replace_me_with_a_local_token}
+      DEVOPSPILOT_FORCE_HEURISTIC: ${DEVOPSPILOT_FORCE_HEURISTIC:-1}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      WEB_ORIGIN: http://localhost:8000
+    volumes:
+      - ./data:/app/data

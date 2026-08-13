@@ -1,0 +1,25 @@
+{
+  "mcpServers": {
+    "devopspilot": {
+      "command": "python",
+      "args": ["mcp_server/server.py"],
+      "env": {
+        "ROLLBACK_TOKEN": "${env:ROLLBACK_TOKEN}"
+      }
+    },
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${env:GITHUB_TOKEN}"
+      }
+    },
+    "gitlab": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-gitlab"],
+      "env": {
+        "GITLAB_PERSONAL_ACCESS_TOKEN": "${env:GITLAB_TOKEN}"
+      }
+    }
+  }
+}

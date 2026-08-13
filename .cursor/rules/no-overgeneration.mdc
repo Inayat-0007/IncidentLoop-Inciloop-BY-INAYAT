@@ -1,0 +1,12 @@
+---
+alwaysApply: true
+---
+
+# Scope control
+
+- Change only files required by the spec/task.
+- No new top-level folders without an ADR (backend/frontend/knowledge/mcp_server/tests are the product layout).
+- No extra features, sample SaaS dashboards, or README novels.
+- If the task is “add field X,” do not rebuild the design system or adjacent modules.
+- One endpoint or one screen per PR unless the human expands the spec.
+- No drive-by refactors, dependency upgrades, or formatting of unrelated files.

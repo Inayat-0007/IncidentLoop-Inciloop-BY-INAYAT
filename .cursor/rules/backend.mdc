@@ -1,0 +1,13 @@
+---
+description: FastAPI handler conventions
+globs: backend/**
+alwaysApply: false
+---
+
+# Backend (`backend/`)
+
+- Shape: route handler → service/graph → tools. No business logic dumped in `main.py` beyond parsing and status codes.
+- Validate with Pydantic models aligned to `contracts/openapi.yaml`.
+- Errors: `{ code, message }` only. Never stack traces, SQL, or internal paths.
+- Policy gate on every rollback execution path.
+- Structured logs; no PII/token fields.

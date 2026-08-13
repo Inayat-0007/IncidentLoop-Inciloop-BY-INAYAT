@@ -1,0 +1,4 @@
+.cursor/hooks/**
+scripts/check-no-secrets.mjs
+scripts/check-no-secrets.sh
+VIBE_CODING_STARTER_PACK_2026.md

@@ -1,0 +1,8 @@
+title = "IncidentLoop gitleaks"
+[allowlist]
+description = "Dummy env names and secret-scanner source"
+paths = [
+  '''\.env\.example$''',
+  '''scripts/check-no-secrets\.mjs$''',
+  '''\.cursor/hooks/block-secrets\.mjs$''',
+]

@@ -1,0 +1,13 @@
+---
+alwaysApply: true
+---
+
+# Constitution (keep tiny)
+
+- Read `docs/specs/constitution.md`, the area spec, and `docs/ADR/` before writing code.
+- Source of truth: `contracts/openapi.yaml`, `docs/DATA_MODEL.md`, `docs/STACK.md`.
+- Do not modify generated Chroma persist dirs; edit `knowledge/**/*.md` instead.
+- Do not add folders, frameworks, or extra features outside the current spec/task.
+- When unsure, read existing source and specs; do not invent routes or packages.
+- Never disable the rollback policy gate, skip tests, or commit secrets.
+- After two repeated mistakes, update a rule or skill — do not lengthen chat prompts.

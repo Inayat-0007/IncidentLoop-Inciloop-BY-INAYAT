@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://inciloop.dev/schemas/incident-declared.json",
+  "title": "IncidentDeclared",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["incidentId", "severity", "title", "occurredAt"],
+  "properties": {
+    "incidentId": { "type": "string", "format": "uuid" },
+    "severity": { "type": "string", "enum": ["sev1", "sev2", "sev3", "sev4"] },
+    "title": { "type": "string" },
+    "occurredAt": { "type": "string", "format": "date-time" }
+  }
+}

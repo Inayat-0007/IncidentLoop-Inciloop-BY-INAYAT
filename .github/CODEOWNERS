@@ -1,0 +1,7 @@
+# CODEOWNERS — human review on contracts and architecture decisions
+* @Inayat-0007
+/contracts/ @Inayat-0007
+/docs/ADR/ @Inayat-0007
+/docs/THREAT_MODEL.md @Inayat-0007
+/ALLOWED_DEPS.md @Inayat-0007
+/.github/ @Inayat-0007

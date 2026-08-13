@@ -1,0 +1,12 @@
+---
+description: Local memory and Chroma persist
+globs: "**/data/**,**/rag/**,**/memory/**"
+alwaysApply: false
+---
+
+# Data
+
+- Memory is SQLite/JSON under `data/`. Do not add Postgres without an ADR.
+- Knowledge source of truth is `knowledge/**/*.md`.
+- Do not commit Chroma caches.
+- Update `docs/DATA_MODEL.md` in the same PR as schema changes.

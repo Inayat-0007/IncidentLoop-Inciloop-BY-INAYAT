@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    env:
+      DEVOPSPILOT_FORCE_HEURISTIC: "1"
+      ROLLBACK_TOKEN: replace_me_with_a_local_token
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -r requirements.txt
+      - name: Lint
+        run: ruff check backend mcp_server tests scripts
+      - name: Test
+        run: pytest
+      - name: Verify allowed dependencies
+        run: python scripts/verify_allowed_deps.py

@@ -1,0 +1,24 @@
+asyncapi: 3.0.0
+info:
+  title: IncidentLoop events
+  version: 0.1.0
+  description: >
+    Future ingest/notify channels. Not implemented in MVP. Do not add consumers
+    until a spec and ADR exist.
+defaultContentType: application/json
+channels:
+  incident.declared:
+    address: incident.declared
+    messages:
+      IncidentDeclared:
+        $ref: "#/components/messages/IncidentDeclared"
+operations:
+  onIncidentDeclared:
+    action: receive
+    channel:
+      $ref: "#/channels/incident.declared"
+components:
+  messages:
+    IncidentDeclared:
+      payload:
+        $ref: "./json-schema/incident-declared.json"
