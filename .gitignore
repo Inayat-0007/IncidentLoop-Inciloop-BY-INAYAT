@@ -20,6 +20,14 @@ data/*.sqlite
 data/memory.json
 data/chroma/
 !data/README.md
+data/company/metrics.json
+data/company/logs.json
+data/company/logs.jsonl
+data/company/releases.json
+data/company/rollback_events.json
+!data/company/README.md
+!data/company/sample/**
+!data/company/templates/**
 
 # Secrets and env
 .env

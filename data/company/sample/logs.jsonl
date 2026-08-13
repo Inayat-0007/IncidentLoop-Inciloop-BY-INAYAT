@@ -1,0 +1,4 @@
+{"line": "ERROR postgres primary unreadable after deploy of web-api"}
+{"line": "ERROR web-api 500 GET /dashboard replication slot missing"}
+{"line": "ERROR database connection refused on postgres-primary:5432"}
+{"line": "WARN replica lag exceeded SLO; failover incomplete"}

@@ -1,10 +1,18 @@
 #!/usr/bin/env python3
-"""Demo path: investigate checkout 500 after deploy → ROLLBACK → authorized execute → healthy."""
+"""Demo path: investigate checkout 500 after deploy → ROLLBACK → authorized execute → healthy.
+
+Uses DATA_SOURCE=sim (test store). Live company-file investigate is a separate path.
+"""
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
+
+os.environ.setdefault("DATA_SOURCE", "sim")
+os.environ.setdefault("ROLLBACK_TOKEN", "replace_me_with_a_local_token")
+os.environ.setdefault("DEVOPSPILOT_FORCE_HEURISTIC", "1")
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 

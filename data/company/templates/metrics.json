@@ -1,0 +1,6 @@
+{
+  "service": "your-service-name",
+  "error_rate": 0.0,
+  "latency_ms": 0,
+  "status": "unknown"
+}

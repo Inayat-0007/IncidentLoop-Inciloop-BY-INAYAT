@@ -15,6 +15,7 @@ COPY knowledge ./knowledge
 COPY mcp_server ./mcp_server
 COPY contracts ./contracts
 COPY scripts ./scripts
+COPY data/company ./data/company
 COPY --from=web /web/dist ./frontend/dist
 RUN mkdir -p data \
     && useradd --create-home --uid 10001 --shell /usr/sbin/nologin appuser \

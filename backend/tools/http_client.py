@@ -1,8 +1,8 @@
-"""HTTP client for simulated-production FastAPI adapters.
+"""HTTP client for FastAPI telemetry adapters.
 
 Agents call GET /api/metrics, /api/logs, /api/releases/latest over HTTP
-(ASGI, same process). That is a real request/response cycle to the mock
-adapters — not Datadog, Kubernetes, or an invented APM.
+(ASGI, same process). Those routes read DATA_SOURCE (company files, HTTP
+JSON, GitHub releases, or sim for tests) — not Datadog or Kubernetes.
 
 Nested TCP to 127.0.0.1:8000 from inside the same uvicorn worker would
 deadlock; ASGITransport avoids that while still exercising the routes.
@@ -47,17 +47,17 @@ async def fetch_json(path: str, params: dict[str, str | None] | None = None) -> 
     except ToolHttpError:
         raise
     except httpx.TimeoutException as exc:
-        raise ToolHttpError(f"Timeout calling simulated production {path}") from exc
+        raise ToolHttpError(f"Timeout calling production tools {path}") from exc
     except httpx.HTTPStatusError as exc:
         raise ToolHttpError(
-            f"Simulated production {path} returned HTTP {exc.response.status_code}"
+            f"Production tools {path} returned HTTP {exc.response.status_code}"
         ) from exc
     except Exception as exc:
         raise ToolHttpError(
-            f"Simulated production {path} failed ({type(exc).__name__})"
+            f"Production tools {path} failed ({type(exc).__name__})"
         ) from exc
     if not isinstance(data, dict):
-        raise ToolHttpError(f"Simulated production {path} returned non-object JSON")
+        raise ToolHttpError(f"Production tools {path} returned non-object JSON")
     return data
 
 

@@ -11,7 +11,7 @@ Do not add frameworks that are not listed. Forbidden alternatives are explicit. 
 | Validation | **Pydantic** 2.10+ | Decision and API schemas |
 | Agent graph | **LangGraph** 1.x | One LLM, six nodes |
 | LLM adapters | **LangChain** 1.x + `langchain-google-genai` | Live path: real Gemini via `ainvoke`. Heuristic is pytest/CI only. |
-| HTTP client | **httpx** 0.28 | Async client for `/api/metrics`, `/api/logs`, `/api/releases/*` (simulated production adapters) |
+| HTTP client | **httpx** 0.28 | ASGI tools + optional `METRICS_URL`/`LOGS_URL`/`RELEASES_URL`/GitHub/webhook |
 | RAG | **ChromaDB** 1.x | Deterministic hash embeddings so CI/Docker work offline |
 | MCP | **mcp** 2.x | Stdio server in `mcp_server/` |
 | Tests | **pytest** 8+ / 9 | Fixed scenario suite |

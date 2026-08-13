@@ -2,9 +2,9 @@
 
 ## Product
 
-DevOpsPilot is a **multi-agent production incident and release assistant** for one simulated environment: PLAN → INVESTIGATE → RETRIEVE → ACT → VERIFY.
+DevOpsPilot is a **multi-agent production incident and release assistant**: PLAN → INVESTIGATE → RETRIEVE → ACT → VERIFY.
 
-Pitch: investigate simulated production incidents, retrieve runbooks and past incidents (RAG), use engineering tools (metrics, logs, releases), recommend `ROLLBACK` | `INVESTIGATE` | `NO_ACTION` | `ESCALATE`, and verify outcome after an **authorized** rollback.
+Pitch: investigate incidents from company-exported metrics/logs/releases (or optional HTTP/GitHub), retrieve runbooks and past incidents (RAG), use engineering tools, recommend `ROLLBACK` | `INVESTIGATE` | `NO_ACTION` | `ESCALATE`, and verify outcome after an **authorized** rollback. `DATA_SOURCE=sim` is pytest/CI only.
 
 Details: `docs/PRD.md`.
 

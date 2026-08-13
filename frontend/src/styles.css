@@ -118,6 +118,12 @@ summary:focus-visible {
   padding: 0.22rem 0.55rem;
 }
 
+.badge.warn {
+  color: #1a1208;
+  background: #e8b84a;
+  border-color: #c4922a;
+}
+
 .health {
   display: flex;
   align-items: center;

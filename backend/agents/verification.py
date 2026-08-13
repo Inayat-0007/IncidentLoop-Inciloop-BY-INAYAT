@@ -20,7 +20,10 @@ async def verify(scenario_id: str, service: str, decision: Decision) -> dict[str
         note = "Rollback recommended but not executed; metrics still degraded."
     elif recovered:
         status = "healthy"
-        note = "Metrics recovered (error_rate ~1.1, latency ~210)."
+        note = (
+            f"Metrics recovered (error_rate={metrics.get('error_rate')} "
+            f"latency_ms={metrics.get('latency_ms')})."
+        )
     else:
         status = "unverified"
         note = "Current metrics do not show recovery."

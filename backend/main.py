@@ -25,6 +25,7 @@ from backend.schemas import (
 from backend.tools import logs as logs_tool
 from backend.tools import monitoring as monitoring_tool
 from backend.tools import release as release_tool
+from backend.tools.adapter import UpstreamError, describe_source, recovered_from_metrics
 from backend.tools.http_client import bind_app
 
 
@@ -65,28 +66,35 @@ def _error(status: int, code: str, message: str) -> JSONResponse:
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok"}
+    return {"status": "ok", **describe_source()}
+
+
+def _tool_or_error(fn, *args):
+    try:
+        return fn(*args)
+    except UpstreamError as exc:
+        return _error(502, "tool_upstream", exc.detail)
 
 
 @app.get("/api/metrics")
 def api_metrics(
     scenario_id: str | None = Query(default=None),
     service: str | None = Query(default=None),
-) -> dict[str, Any]:
-    return monitoring_tool.get_metrics(scenario_id, service)
+) -> Any:
+    return _tool_or_error(monitoring_tool.get_metrics, scenario_id, service)
 
 
 @app.get("/api/logs")
 def api_logs(
     scenario_id: str | None = Query(default=None),
     service: str | None = Query(default=None),
-) -> dict[str, Any]:
-    return logs_tool.get_logs(scenario_id, service)
+) -> Any:
+    return _tool_or_error(logs_tool.get_logs, scenario_id, service)
 
 
 @app.get("/api/releases/latest")
-def api_latest_release(scenario_id: str | None = Query(default=None)) -> dict[str, Any]:
-    return release_tool.get_latest_release(scenario_id)
+def api_latest_release(scenario_id: str | None = Query(default=None)) -> Any:
+    return _tool_or_error(release_tool.get_latest_release, scenario_id)
 
 
 @app.post("/api/releases/rollback")
@@ -98,7 +106,13 @@ def api_mock_rollback(
         return _error(401, "unauthorized", "Missing or invalid bearer token")
     if not body.authorized:
         return _error(403, "forbidden", "ESCALATE TO HUMAN: explicit authorized=true required")
-    return release_tool.rollback_release(body.scenario_id)
+    try:
+        result = release_tool.rollback_release(body.scenario_id)
+    except UpstreamError as exc:
+        return _error(502, "tool_upstream", exc.detail)
+    if not result.get("ok"):
+        return _error(409, "rollback_not_configured", result.get("message") or "ESCALATE TO HUMAN")
+    return result
 
 
 @app.post("/investigate")
@@ -194,15 +208,26 @@ def execute_rollback(
     if not ok:
         return _error(409, "policy_denied", message)
 
-    mutated = release_tool.rollback_release(scenario_id)
-    metrics = monitoring_tool.get_metrics(scenario_id, row.get("service"))
-    row["status"] = "verified"
+    try:
+        mutated = release_tool.rollback_release(scenario_id, incident_id)
+    except UpstreamError as exc:
+        return _error(502, "tool_upstream", exc.detail)
+    if not mutated.get("ok"):
+        return _error(409, "rollback_not_configured", mutated.get("message") or "ESCALATE TO HUMAN")
+    try:
+        metrics = monitoring_tool.get_metrics(scenario_id, row.get("service"))
+    except UpstreamError as exc:
+        return _error(502, "tool_upstream", exc.detail)
+    recovered = recovered_from_metrics(metrics)
+    row["status"] = "verified" if recovered else "executed"
     row["verification"] = {
         "metrics": metrics,
-        "recovered": True,
-        "status": "healthy",
-        "note": "Authorized rollback executed; mock production recovered.",
+        "recovered": recovered,
+        "status": "healthy" if recovered else "pending_verification",
+        "note": mutated.get("message"),
         "release_after": mutated.get("release"),
+        "data_source": mutated.get("data_source"),
+        "data_mode": mutated.get("data_mode"),
     }
     memory.save_incident(incident_id, row)
     memory.mark_resolved(incident_id)

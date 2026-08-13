@@ -10,8 +10,16 @@ services:
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
       GEMINI_TIMEOUT_S: ${GEMINI_TIMEOUT_S:-20}
       WEB_ORIGIN: http://localhost:8000
+      DATA_SOURCE: ${DATA_SOURCE:-files}
+      METRICS_URL: ${METRICS_URL:-}
+      LOGS_URL: ${LOGS_URL:-}
+      RELEASES_URL: ${RELEASES_URL:-}
+      GITHUB_REPO: ${GITHUB_REPO:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      ROLLBACK_WEBHOOK_URL: ${ROLLBACK_WEBHOOK_URL:-}
     volumes:
       - pilot-data:/app/data
+      - ./data/company:/app/data/company
 
 volumes:
   pilot-data:

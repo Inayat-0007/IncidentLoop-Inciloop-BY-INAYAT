@@ -1,0 +1,8 @@
+{
+  "service": "web-api",
+  "version": "14.8.2",
+  "previous_version": "14.8.1",
+  "previous": "14.8.1",
+  "rollback_available": true,
+  "deployed_at": "2017-01-31T19:00:00Z"
+}

@@ -1,6 +1,8 @@
 # Data model — DevOpsPilot
 
-No Postgres in MVP. Persistence is local files under `data/` (gitignored except README).
+No Postgres in MVP. Persistence is local files under `data/` (gitignored except README, company sample/templates).
+
+Company telemetry (not committed live dumps): `data/company/metrics.json`, `logs.jsonl` or `logs.json`, `releases.json`. Sample bundle: `data/company/sample/`. Rollback audit: `data/company/rollback_events.json`.
 
 ## Incident
 

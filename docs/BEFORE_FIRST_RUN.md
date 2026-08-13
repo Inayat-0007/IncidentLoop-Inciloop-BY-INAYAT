@@ -4,7 +4,7 @@ How to set up **this** repository before you start the API or UI. Paths, env nam
 
 ## 1. What this system is
 
-DevOpsPilot is a **multi-agent production incident and release assistant** for **one simulated environment**: PLAN → INVESTIGATE → RETRIEVE → ACT → VERIFY. A FastAPI service runs a LangGraph of six agents that read **in-process mock** metrics, logs, and releases, retrieve markdown runbooks/incidents (RAG), and emit `ROLLBACK` | `INVESTIGATE` | `NO_ACTION` | `ESCALATE`. A human must authorize rollback; the graph never executes it. This is **not** a Kubernetes control plane, live cluster manager, Datadog, or GitHub deploy API. Rollback only mutates mock state (healthy band: `error_rate` 1.1, `latency_ms` 210).
+DevOpsPilot is a **multi-agent production incident and release assistant**: PLAN → INVESTIGATE → RETRIEVE → ACT → VERIFY. A FastAPI service runs a LangGraph of six agents that read **company-exported** metrics, logs, and releases (`DATA_SOURCE=files` by default), retrieve markdown runbooks/incidents (RAG), and emit `ROLLBACK` | `INVESTIGATE` | `NO_ACTION` | `ESCALATE`. A human must authorize rollback; the graph never executes it. This is **not** a Kubernetes control plane, Datadog, or auto-rollback. Optional `http` / `github` adapters and `ROLLBACK_WEBHOOK_URL` are operator-configured. `DATA_SOURCE=sim` is pytest/CI only.
 
 ## 2. Architecture
 
@@ -35,14 +35,16 @@ flowchart TB
     D --> V
   end
 
-  subgraph tools ["Simulated production HTTP adapters"]
+  subgraph tools ["Telemetry adapters (DATA_SOURCE)"]
     Mon["tools/monitoring.py"]
     Logs["tools/logs.py"]
     Rel["tools/release.py"]
-    Sim["tools/sim_store.py"]
-    Mon --> Sim
-    Logs --> Sim
-    Rel --> Sim
+    Adp["tools/adapter.py"]
+    Sim["tools/sim_store.py (tests)"]
+    Mon --> Adp
+    Logs --> Adp
+    Rel --> Adp
+    Adp --> Sim
   end
 
   subgraph rag ["Knowledge"]
@@ -98,7 +100,7 @@ Docker Compose is **one** `api` service on port 8000. If `frontend/dist` exists 
 | `docker-compose.yml` | Single `api` service, `8000:8000`, volume `pilot-data` |
 | `Dockerfile` | Multi-stage: Node builds UI, Python 3.12 runs uvicorn as `appuser` |
 | `backend/main.py` | FastAPI app, CORS, routes, lifespan ingest |
-| `backend/config.py` | `load_dotenv()`, paths, `ROLLBACK_TOKEN`, `WEB_ORIGIN`, test-only heuristic flag, timeouts |
+| `backend/config.py` | `load_dotenv()`, paths, `DATA_SOURCE`, `ROLLBACK_TOKEN`, webhook/GitHub/HTTP URLs, test-only heuristic flag |
 | `backend/schemas.py` | Pydantic request/decision/incident/trace models |
 | `backend/llm.py` | Real Gemini `ainvoke`; raises on failure (no silent heuristic) |
 | `backend/graph/workflow.py` | LangGraph: planner → parallel (incident, knowledge, release) → decision → verification |
@@ -108,7 +110,8 @@ Docker Compose is **one** `api` service on port 8000. If `frontend/dist` exists 
 | `backend/agents/release.py` | HTTP GET `/api/releases/latest` |
 | `backend/agents/decision.py` | Gemini JSON decision, or heuristic when `DEVOPSPILOT_FORCE_HEURISTIC=1` (tests only) |
 | `backend/agents/verification.py` | Re-reads metrics; does **not** execute rollback |
-| `backend/tools/sim_store.py` | In-memory scenario snapshots |
+| `backend/tools/adapter.py` | files / HTTP / GitHub / sim routing |
+| `backend/tools/sim_store.py` | In-memory scenario snapshots (`DATA_SOURCE=sim`) |
 | `backend/tools/monitoring.py` | `get_metrics` |
 | `backend/tools/logs.py` | `get_logs` |
 | `backend/tools/release.py` | `get_latest_release` / `rollback_release` |
@@ -157,8 +160,7 @@ Default UI prompt (`frontend/src/App.tsx`): checkout-api 500 after latest deploy
 4. **Decision** — live: Gemini JSON (`ROLLBACK`/`INVESTIGATE`/`NO_ACTION`/`ESCALATE`). Tests: deterministic heuristic. Killer path still needs confidence ≥ 0.7 and ≥ 3 evidence bullets before a human can execute rollback.
 5. **Verification** (graph) — HTTP metrics again; after investigate, sim is still degraded → `status: "pending_authorization"`. Graph **does not** call rollback tools.
 6. Record saved: SQLite `data/memory.sqlite` + `data/memory.json`. Response is `IncidentRecord` (`id`, `prompt`, `scenario_id`, `service`, `status`, `decision`, `verification`, `traces`, `release`, `logs`).
-7. **Human-authorized execute** → `POST /incidents/{incident_id}/rollback` with `Authorization: Bearer $ROLLBACK_TOKEN` and JSON `{ "authorized": true, "scenario_id"?: "..." }`. Policy gate (`backend/policy/gate.py`) requires token, `authorized=true`, recommendation `ROLLBACK`, confidence ≥ 0.7, ≥ 3 evidence items, current release, rollback target. Then `rollback_release` mutates sim.
-8. Response incident `status: "verified"`; `verification.metrics` recovered (`error_rate` 1.1, `latency_ms` 210). Optional: `GET /ops/{incident_id}` for traces; `GET /incidents/{incident_id}` for stored record.
+7. **Human-authorized execute** → `POST /incidents/{incident_id}/rollback` with `Authorization: Bearer $ROLLBACK_TOKEN` and JSON `{ "authorized": true, "scenario_id"?: "..." }`. Policy gate (`backend/policy/gate.py`) requires token, `authorized=true`, recommendation `ROLLBACK`, confidence ≥ 0.7, ≥ 3 evidence items, current release, rollback target. Then `rollback_release`: sim mutates the test store; files may audit + `desired_version`; HTTP/GitHub need `ROLLBACK_WEBHOOK_URL` or return 409.
 
 Direct mock mutate (same token + `authorized: true`): `POST /api/releases/rollback` — **not** used by the AgentOps UI; UI uses `/incidents/{id}/rollback`.
 
@@ -171,7 +173,7 @@ Direct mock mutate (same token + `authorized: true`): `POST /api/releases/rollba
 | Browser `http://localhost:5173` | FastAPI `127.0.0.1:8000` | Vite **dev proxy** for `/investigate`, `/incidents`, `/ops`, `/api`, `/health` (`frontend/vite.config.ts`). UI `fetch` uses **relative** paths; there is **no** `VITE_API_*` env. |
 | Browser origin vs API | CORS | `WEB_ORIGIN` plus hardcoded `http://localhost:5173` and `http://127.0.0.1:5173`. Methods GET/POST/OPTIONS. Headers `Authorization`, `Content-Type`. `allow_credentials=False`. |
 | Docker UI | Same origin `:8000` | Compose sets `WEB_ORIGIN=http://localhost:8000`. Image copies `frontend/dist`; FastAPI mounts `/assets` and `GET /`. |
-| Graph agents | Simulated production `/api/*` | **httpx.AsyncClient** + ASGI to `GET /api/metrics`, `/api/logs`, `/api/releases/latest`. Same FastAPI adapters the UI/curl use. Not Datadog/K8s. |
+| Graph agents | `/api/*` then adapter | **httpx.AsyncClient** + ASGI to `GET /api/metrics`, `/api/logs`, `/api/releases/latest`. Adapter reads files/HTTP/GitHub/sim. Not Datadog/K8s. |
 | RAG ingest | Disk | `CHROMA_PATH` default `./data/chroma` (`backend/config.py`). Collection name `devopspilot`. |
 | Runtime retrieve | Markdown files | `retriever.py` scores `knowledge/` on disk (does not query Chroma at retrieve time). |
 | Memory | Disk | `DATA_DIR/memory.sqlite` and `DATA_DIR/memory.json`. Default `DATA_DIR=./data`. |
@@ -191,6 +193,11 @@ From `.env.example` (and a few names read in code but not listed there):
 
 | Name | Required? | Used where | Notes |
 |---|---|---|---|
+| `DATA_SOURCE` | Live default **files** | `backend/config.py` | `files` \| `http` \| `github` \| `sim`. `sim` is pytest/CI only. |
+| `METRICS_URL` `LOGS_URL` `RELEASES_URL` | If `DATA_SOURCE=http` | adapter GET JSON | Operator URLs only. Timeout/bad JSON → 502, never invent 18.4. |
+| `GITHUB_REPO` | If `DATA_SOURCE=github` | GitHub releases then tags | e.g. `owner/name` |
+| `GITHUB_TOKEN` | Optional | GitHub API + Cursor MCP | Env only; never logged |
+| `ROLLBACK_WEBHOOK_URL` | Optional for real execute | POST after policy gate | Missing → 409 except files audit / sim |
 | `ROLLBACK_TOKEN` | **Yes for mutations** | `backend/config.py` → `POST /incidents/{id}/rollback`, `POST /api/releases/rollback` | Default in code if unset: `replace_me_with_a_local_token` (same as `.env.example` and `scripts/demo.py`). Generate a local random string for anything beyond local demo. |
 | `WEB_ORIGIN` | Optional | CORS in `backend/main.py` | Default `http://localhost:5173`. Docker Compose overrides to `http://localhost:8000`. |
 | `DATA_DIR` | Optional | config, memory, ingest | Default `./data` |
@@ -202,7 +209,6 @@ From `.env.example` (and a few names read in code but not listed there):
 | `APP_ENV` | Documented only | **Not read** by Python | Placeholder in `.env.example` |
 | `API_HOST` | Documented only | **Not read** by Python | Uvicorn host comes from the CLI (`127.0.0.1` local / `0.0.0.0` Docker) |
 | `API_PORT` | Documented only | **Not read** by Python | Use `--port 8000` |
-| `GITHUB_TOKEN` | Optional OS env | `.cursor/mcp.json` only (commented in `.env.example`) | Not a product API key |
 | `GITLAB_TOKEN` | Optional OS env | `.cursor/mcp.json` only | Not a product API key |
 
 Also used in code:
@@ -341,12 +347,12 @@ Via Vite: same paths on `http://localhost:5173` (proxied).
 
 ## 11. What is not wired (honest)
 
-- No live Kubernetes, cluster, or deploy control plane.
-- No Datadog / Prometheus / vendor APM — metrics are `sim_store`.
-- No GitHub/GitLab **product** deploy API. Cursor MCP GitHub/GitLab entries are optional IDE servers, unused by FastAPI.
+- No live Kubernetes, cluster, or deploy control plane (webhook is a POST you configure).
+- No Datadog / vendor APM. Files or GET JSON you point at; optional Prometheus-ish mapper.
+- GitHub **releases/tags** when `DATA_SOURCE=github`. Not a deploy API.
 - No Slack/PagerDuty writes, on-call, public status page, or auto-rollback without a human.
 - LLM is **required** for live investigate (Gemini). Missing keys / 404 / quota → 502/503. `DEVOPSPILOT_FORCE_HEURISTIC=1` is pytest/CI only.
-- Agents HTTP-call `/api/*` (ASGI httpx) for metrics/logs/releases. Those adapters read `sim_store`, not Datadog/K8s.
+- Agents HTTP-call `/api/*` (ASGI httpx). Adapters never invent 18.4% when upstream is empty.
 - Chroma is written on ingest; **retrieve** is keyword-over-markdown, so a missing Chroma dir does not block investigate if `knowledge/` exists.
 - `APP_ENV` / `API_HOST` / `API_PORT` in `.env.example` are unused by application code.
 - Previous Node/Next/Hono IncidentLoop apps are **removed** (`docs/DEPRECATED_NODE.md`).
@@ -362,6 +368,7 @@ Via Vite: same paths on `http://localhost:5173` (proxied).
 | Rollback 401 | Bearer must equal `ROLLBACK_TOKEN`. UI default and demo use `replace_me_with_a_local_token`. |
 | Rollback 403 | Body must include `"authorized": true`. |
 | Rollback 409 `policy_denied` | Gate refused: not ROLLBACK, low confidence, few evidence bullets, or missing release/target. |
+| Rollback 409 `rollback_not_configured` | No `ROLLBACK_WEBHOOK_URL` on http/github (or files sample_bundle). |
 | CORS in the browser | Hit the UI on 5173 (proxy) or 8000 (Docker SPA). Custom origins: set `WEB_ORIGIN`. |
 | Frontend talks to the wrong host | No API base URL env — Vite proxy must reach `127.0.0.1:8000`. Start uvicorn first. |
 | pytest wants LLM | Tests set `DEVOPSPILOT_FORCE_HEURISTIC=1`. That flag is **not** for Docker/production. |

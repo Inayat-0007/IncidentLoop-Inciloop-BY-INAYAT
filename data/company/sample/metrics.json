@@ -1,0 +1,6 @@
+{
+  "service": "web-api",
+  "error_rate": 12.7,
+  "latency_ms": 890,
+  "status": "degraded"
+}

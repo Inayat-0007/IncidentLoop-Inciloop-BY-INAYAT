@@ -1,9 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { ApiErrorBody, Incident, OpsTraces, Trace } from "./types";
 
-const DEFAULT_PROMPT =
-  "checkout-api is throwing 500 after the latest deploy; PaymentService timeout and DB connection refused";
-
 const FLOW = ["PLAN", "INVESTIGATE", "RETRIEVE", "ACT", "VERIFY"] as const;
 
 const AGENT_LABELS: Record<string, string> = {
@@ -29,8 +26,11 @@ const QUOTES = [
   "Recommendation is not execution.",
   "Rollback stays behind a human gate.",
   "If Gemini is down, we fail closed.",
-  "Simulated production. Real investigation loop.",
+  "Company files in, recommendation out. No auto-rollback.",
 ];
+
+const DEFAULT_PROMPT =
+  "web-api is returning 500 after the latest deploy; postgres primary unreadable and connection refused";
 
 const STAGGER_MS = 220;
 
@@ -89,6 +89,8 @@ export default function App() {
   const [visibleTraces, setVisibleTraces] = useState(0);
   const [quoteIx, setQuoteIx] = useState(0);
   const [health, setHealth] = useState<"unknown" | "ok" | "down">("unknown");
+  const [dataBadge, setDataBadge] = useState("Company files");
+  const [dataMode, setDataMode] = useState<string | null>(null);
   const [submittedPrompt, setSubmittedPrompt] = useState<string | null>(null);
 
   useEffect(() => {
@@ -97,7 +99,11 @@ export default function App() {
       try {
         const r = await fetch("/health");
         const body = await r.json().catch(() => null);
-        if (!cancelled) setHealth(r.ok && body?.status === "ok" ? "ok" : "down");
+        if (!cancelled) {
+          setHealth(r.ok && body?.status === "ok" ? "ok" : "down");
+          if (body?.badge) setDataBadge(String(body.badge));
+          if (body?.data_mode) setDataMode(String(body.data_mode));
+        }
       } catch {
         if (!cancelled) setHealth("down");
       }
@@ -228,7 +234,12 @@ export default function App() {
           <p className="lede">Incident war-room assistant. Investigate, retrieve runbooks, recommend — never auto-rollback.</p>
         </div>
         <div className="badge-row">
-          <span className="badge">Simulated production · real Gemini</span>
+          <span className="badge">{dataBadge} · real Gemini</span>
+          {dataMode === "sample_bundle" ? (
+            <span className="badge warn">sample_bundle — drop files in data/company/</span>
+          ) : dataMode ? (
+            <span className="badge">data_mode: {dataMode}</span>
+          ) : null}
         </div>
         <div className="health" aria-live="polite">
           <span className={`dot ${health === "ok" ? "ok" : health === "down" ? "down" : ""}`} />
@@ -254,8 +265,9 @@ export default function App() {
               <div className="who">Briefing</div>
               <div className="bubble">
                 <p>
-                  Describe a simulated production symptom. The graph runs PLAN → INVESTIGATE → RETRIEVE → ACT →
-                  VERIFY, then returns a recommendation with evidence. Execution still requires your token.
+                  Describe a symptom from your exported metrics/logs/releases (or the sample bundle). The graph
+                  runs PLAN → INVESTIGATE → RETRIEVE → ACT → VERIFY. Execution still requires your token and
+                  does not auto-rollback production.
                 </p>
               </div>
             </section>

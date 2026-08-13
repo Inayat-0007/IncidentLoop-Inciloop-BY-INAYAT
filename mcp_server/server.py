@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""MCP server wrapping the same mock production tools as FastAPI."""
+"""MCP server wrapping the same company-data / sim tools as FastAPI."""
 
 from __future__ import annotations
 
@@ -19,19 +19,19 @@ mcp = FastMCP("devopspilot")
 
 @mcp.tool()
 def monitoring_metrics(scenario_id: str = "default", service: str = "checkout-api") -> dict:
-    """Read simulated service metrics (error_rate, latency_ms)."""
+    """Read service metrics (error_rate, latency_ms) from DATA_SOURCE adapters."""
     return get_metrics(scenario_id, service)
 
 
 @mcp.tool()
 def logs_tail(scenario_id: str = "default", service: str = "checkout-api") -> dict:
-    """Read simulated ERROR/INFO log lines."""
+    """Read ERROR/INFO log lines from DATA_SOURCE adapters."""
     return get_logs(scenario_id, service)
 
 
 @mcp.tool()
 def release_latest(scenario_id: str = "default") -> dict:
-    """Read simulated latest release and rollback target."""
+    """Read latest release and rollback target from DATA_SOURCE adapters."""
     return get_latest_release(scenario_id)
 
 
@@ -42,7 +42,7 @@ def release_rollback(
     token: str = "",
     incident_id: str = "",
 ) -> dict:
-    """Execute simulated rollback. Same policy as HTTP: token + authorized + evidence/release/target."""
+    """Execute rollback. Same policy as HTTP: token + authorized + evidence/release/target."""
     ok, message = evaluate_mcp_rollback(
         token=token,
         authorized=authorized,
@@ -51,7 +51,10 @@ def release_rollback(
     )
     if not ok:
         return {"ok": False, "message": message}
-    return rollback_release(scenario_id)
+    result = rollback_release(scenario_id, incident_id or None)
+    if not result.get("ok"):
+        return {"ok": False, "message": result.get("message")}
+    return result
 
 
 if __name__ == "__main__":
